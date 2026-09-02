@@ -1,0 +1,122 @@
+# JIRA API
+
+This document describes the JIRA API functionality currently implemented in the Work Tracker API.
+
+## Current Endpoints
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `GET` | `/api/jiras` | Query all JIRAs from the Notion JIRAs data source. |
+| `GET` | `/api/jiras/active` | Query active sprint JIRAs. |
+| `GET` | `/api/jiras/blocked` | Query active sprint JIRAs with blocked status. |
+| `GET` | `/api/jiras/spillovers` | Query active sprint spillover JIRAs. |
+| `GET` | `/api/jiras/appraisal` | Query JIRAs marked for appraisal. |
+| `GET` | `/api/jiras/demo-pending` | Query JIRAs requiring a demo with no demo date. |
+| `GET` | `/api/jiras/demoed` | Query JIRAs with a demo date. |
+
+Unknown paths such as `/api/jiras/random` are not handled by `handleJiraRoutes()` and fall through to the main Worker 404.
+
+## Response Shape
+
+All JIRA list endpoints return:
+
+```json
+{
+  "data": [],
+  "count": 0,
+  "hasMore": false,
+  "nextCursor": null
+}
+```
+
+## Filter Semantics
+
+Filtering is performed in the Notion data-source query request, not by filtering an already-fetched array in JavaScript.
+
+| Endpoint | Notion Filter Semantics |
+| --- | --- |
+| `/api/jiras/active` | `In Active Sprint = true` |
+| `/api/jiras/blocked` | `In Active Sprint = true AND Status = Blocked` |
+| `/api/jiras/spillovers` | `In Active Sprint = true AND Spillover = true` |
+| `/api/jiras/appraisal` | `Appraisal = true` |
+| `/api/jiras/demo-pending` | `Demo Required = true AND Demoed Date is empty` |
+| `/api/jiras/demoed` | `Demoed Date is not empty` |
+
+`In Active Sprint` and `Spillover` are Notion formula values returning booleans.
+
+## Mapped JIRA Fields
+
+Each mapped JIRA can include:
+
+```text
+id
+createdTime
+lastEditedTime
+jiraKey
+summary
+status
+tags
+appraisal
+spillover
+spilloverCount
+spilloverReason
+inActiveSprint
+demoRequired
+demoedDate
+demoNotes
+sprintIds
+projectIds
+blockedByIds
+releaseItemIds
+```
+
+Relation IDs currently remain raw Notion page IDs:
+
+- `sprintIds`
+- `projectIds`
+- `blockedByIds`
+- `releaseItemIds`
+
+Relation-name resolution is intentionally deferred. Keeping raw IDs preserves relationship information while avoiding additional Notion calls until a feature needs resolved names.
+
+## Historical JIRA Goal
+
+Old JIRAs should remain queryable later by JIRA key. Sprint history should not be destroyed by removing historical relations just to simplify active sprint views.
+
+## Future, Not Implemented
+
+Planned endpoint:
+
+```text
+GET /api/jiras/:jiraKey
+```
+
+This endpoint does not exist yet.
+
+## Tests
+
+The current test suite is expected to pass with:
+
+```bash
+npm test -- --run
+```
+
+Current tests cover:
+
+- root route response
+- normal 404 behavior
+- JIRA route handling
+- JIRA mapping
+- Notion request URL
+- Notion request headers
+- Notion request body
+- filter payloads for each JIRA endpoint
+- unknown JIRA path fallthrough behavior
+
+Do not hardcode current sample test records as assumptions about production data.
+
+## Related Docs
+
+- [Architecture](architecture.md)
+- [Notion Integration](notion-integration.md)
+- [Worker as API Proxy](../documentation/04-worker-as-api-proxy.md)
