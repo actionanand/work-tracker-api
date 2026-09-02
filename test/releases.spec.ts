@@ -1,6 +1,6 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { handleWorkLogRoutes } from "../src/features/work-logs/work-log.routes";
+import { handleReleaseRoutes } from "../src/features/releases/release.routes";
 import worker from "../src/index";
 import type { Env } from "../src/shared/env";
 
@@ -18,30 +18,44 @@ const testEnv: Env = {
 	RELEASE_ITEMS_DATA_SOURCE_ID: "test-release-items-data-source-id",
 };
 
-const projectId = "33333333-3333-3333-3333-333333333333";
-const compactProjectId = "33333333333333333333333333333333";
 const jiraId = "55555555-5555-5555-5555-555555555555";
+const compactJiraId = "55555555555555555555555555555555";
 
-const dateSort = [{ property: "Date", direction: "descending" }];
+const announcedDateSort = [
+	{ property: "Formal Announced Date", direction: "descending" },
+];
+const confirmedDateSort = [
+	{ property: "Confirmed Release Date", direction: "descending" },
+];
 
-const fromFilter = {
-	property: "Date",
+const pendingFilter = {
+	and: [
+		{
+			property: "Formal Announced Date",
+			date: {
+				is_not_empty: true,
+			},
+		},
+		{
+			property: "Confirmed Release Date",
+			date: {
+				is_empty: true,
+			},
+		},
+	],
+};
+
+const confirmedFilter = {
+	property: "Confirmed Release Date",
 	date: {
-		on_or_after: "2026-09-01",
+		is_not_empty: true,
 	},
 };
 
-const toFilter = {
-	property: "Date",
+const notAnnouncedFilter = {
+	property: "Formal Announced Date",
 	date: {
-		on_or_before: "2026-09-30",
-	},
-};
-
-const projectFilter = {
-	property: "Project",
-	relation: {
-		contains: projectId,
+		is_empty: true,
 	},
 };
 
@@ -52,200 +66,195 @@ const jiraFilter = {
 	},
 };
 
-const categoryFilter = {
-	property: "Category",
+const deploymentTypeFilter = {
+	property: "Deployment Type",
 	select: {
-		equals: "Office Work",
+		equals: "Backstage",
 	},
 };
 
-const typeFilter = {
-	property: "Type",
-	select: {
-		equals: "Meeting",
+const componentFilter = {
+	property: "Component Name",
+	rich_text: {
+		contains: "cortellis",
 	},
 };
 
-const workModeFilter = {
-	property: "Work Mode",
-	select: {
-		equals: "WFO (Office)",
+const fromFilter = {
+	property: "Formal Announced Date",
+	date: {
+		on_or_after: "2026-08-01",
 	},
 };
 
-const appraisalFilter = {
-	property: "Appraisal",
-	checkbox: {
-		equals: true,
+const toFilter = {
+	property: "Formal Announced Date",
+	date: {
+		on_or_before: "2026-09-30",
 	},
 };
 
 const routeCases = [
 	{
-		path: "/api/work-logs",
+		path: "/api/releases",
 		expectedBody: {
 			page_size: 100,
-			sorts: dateSort,
+			sorts: announcedDateSort,
 		},
 	},
 	{
-		path: "/api/work-logs/appraisal",
+		path: "/api/releases/pending",
 		expectedBody: {
 			page_size: 100,
-			filter: appraisalFilter,
-			sorts: dateSort,
+			filter: pendingFilter,
+			sorts: announcedDateSort,
 		},
 	},
 	{
-		path: "/api/work-logs?from=2026-09-01",
+		path: "/api/releases/confirmed",
+		expectedBody: {
+			page_size: 100,
+			filter: confirmedFilter,
+			sorts: confirmedDateSort,
+		},
+	},
+	{
+		path: "/api/releases/not-announced",
+		expectedBody: {
+			page_size: 100,
+			filter: notAnnouncedFilter,
+			sorts: announcedDateSort,
+		},
+	},
+	{
+		path: `/api/releases?jiraId=${jiraId}`,
+		expectedBody: {
+			page_size: 100,
+			filter: jiraFilter,
+			sorts: announcedDateSort,
+		},
+	},
+	{
+		path: `/api/releases?jiraId=${compactJiraId}`,
+		expectedBody: {
+			page_size: 100,
+			filter: jiraFilter,
+			sorts: announcedDateSort,
+		},
+	},
+	{
+		path: "/api/releases?deploymentType=Backstage",
+		expectedBody: {
+			page_size: 100,
+			filter: deploymentTypeFilter,
+			sorts: announcedDateSort,
+		},
+	},
+	{
+		path: "/api/releases?component=cortellis",
+		expectedBody: {
+			page_size: 100,
+			filter: componentFilter,
+			sorts: announcedDateSort,
+		},
+	},
+	{
+		path: "/api/releases?from=2026-08-01",
 		expectedBody: {
 			page_size: 100,
 			filter: fromFilter,
-			sorts: dateSort,
+			sorts: announcedDateSort,
 		},
 	},
 	{
-		path: "/api/work-logs?to=2026-09-30",
+		path: "/api/releases?to=2026-09-30",
 		expectedBody: {
 			page_size: 100,
 			filter: toFilter,
-			sorts: dateSort,
+			sorts: announcedDateSort,
 		},
 	},
 	{
-		path: "/api/work-logs?from=2026-09-01&to=2026-09-30",
+		path: "/api/releases?from=2026-08-01&to=2026-09-30",
 		expectedBody: {
 			page_size: 100,
 			filter: {
 				and: [fromFilter, toFilter],
 			},
-			sorts: dateSort,
+			sorts: announcedDateSort,
 		},
 	},
 	{
-		path: `/api/work-logs?projectId=${projectId}`,
+		path: `/api/releases/pending?jiraId=${jiraId}&deploymentType=Backstage`,
 		expectedBody: {
 			page_size: 100,
-			filter: projectFilter,
-			sorts: dateSort,
+			filter: {
+				and: [pendingFilter, jiraFilter, deploymentTypeFilter],
+			},
+			sorts: announcedDateSort,
 		},
 	},
 	{
-		path: `/api/work-logs?projectId=${compactProjectId}`,
-		expectedBody: {
-			page_size: 100,
-			filter: projectFilter,
-			sorts: dateSort,
-		},
-	},
-	{
-		path: `/api/work-logs?jiraId=${jiraId}`,
-		expectedBody: {
-			page_size: 100,
-			filter: jiraFilter,
-			sorts: dateSort,
-		},
-	},
-	{
-		path: "/api/work-logs?category=Office%20Work",
-		expectedBody: {
-			page_size: 100,
-			filter: categoryFilter,
-			sorts: dateSort,
-		},
-	},
-	{
-		path: "/api/work-logs?type=Meeting",
-		expectedBody: {
-			page_size: 100,
-			filter: typeFilter,
-			sorts: dateSort,
-		},
-	},
-	{
-		path: "/api/work-logs?workMode=WFO%20(Office)",
-		expectedBody: {
-			page_size: 100,
-			filter: workModeFilter,
-			sorts: dateSort,
-		},
-	},
-	{
-		path: `/api/work-logs?from=2026-09-01&to=2026-09-30&projectId=${projectId}&jiraId=${jiraId}&category=Office%20Work&type=Meeting&workMode=WFO%20(Office)`,
+		path: `/api/releases?jiraId=${jiraId}&deploymentType=Backstage&component=cortellis&from=2026-08-01&to=2026-09-30`,
 		expectedBody: {
 			page_size: 100,
 			filter: {
 				and: [
+					jiraFilter,
+					deploymentTypeFilter,
+					componentFilter,
 					fromFilter,
 					toFilter,
-					projectFilter,
-					jiraFilter,
-					categoryFilter,
-					typeFilter,
-					workModeFilter,
 				],
 			},
-			sorts: dateSort,
+			sorts: announcedDateSort,
 		},
 	},
 ] as const;
 
-const fullWorkLogPage = {
-	id: "work-log-id",
+const fullReleasePage = {
+	id: "release-item-id",
 	created_time: "2026-09-01T08:00:00.000Z",
 	last_edited_time: "2026-09-01T09:00:00.000Z",
 	properties: {
-		Update: {
-			title: [{ plain_text: "  Daily update  " }],
-		},
-		Date: {
-			date: { start: "2026-09-01" },
-		},
-		Category: {
-			select: { name: " Office Work " },
-		},
-		Project: {
-			relation: [{ id: projectId }],
-		},
-		Company: {
-			rollup: {
-				type: "array",
-				array: [
-					{
-						type: "relation",
-						relation: [{ id: "11111111-1111-1111-1111-111111111111" }],
-					},
-				],
-			},
-		},
-		Team: {
-			rollup: {
-				type: "array",
-				array: [
-					{
-						type: "relation",
-						relation: [{ id: "22222222-2222-2222-2222-222222222222" }],
-					},
-				],
-			},
-		},
-		Type: {
-			select: { name: " Meeting " },
+		"Release Items": {
+			title: [{ plain_text: "  Release CRI-1234  " }],
 		},
 		JIRAs: {
 			relation: [{ id: jiraId }],
 		},
-		"Jira Status": {
+		"Component Name": {
+			rich_text: [{ plain_text: "  cortellis-admin  " }],
+		},
+		"Deployment Type": {
+			select: { name: " Backstage " },
+		},
+		"Version Number": {
+			rich_text: [{ plain_text: "  76.0.193-9862616  " }],
+		},
+		Branch: {
+			rich_text: [{ plain_text: "  release/76.0  " }],
+		},
+		"Formal Announced Date": {
+			date: { start: "2026-09-01" },
+		},
+		"Confirmed Release Date": {
+			date: { start: "2026-09-03" },
+		},
+		Notes: {
+			rich_text: [{ plain_text: "  TAR tracked in release notes  " }],
+		},
+		"JIRA Status": {
 			rollup: {
 				type: "array",
 				array: [
 					{
 						type: "status",
-						status: { name: " Blocked " },
+						status: { name: " Done " },
 					},
 					{
 						type: "select",
-						select: { name: "Done" },
+						select: { name: "Blocked" },
 					},
 				],
 			},
@@ -266,78 +275,60 @@ const fullWorkLogPage = {
 				type: "array",
 				array: [
 					{
-						type: "number",
-						number: 2,
-					},
-					{
 						type: "formula",
 						formula: {
 							type: "number",
-							number: 1,
+							number: 2,
 						},
+					},
+					{
+						type: "number",
+						number: 1,
 					},
 				],
 			},
 		},
-		Comment: {
-			rich_text: [{ plain_text: "  Built endpoint  " }],
-		},
-		"Went Wrong": {
-			rich_text: [{ plain_text: "  Blocked by review  " }],
-		},
-		"Work Mode": {
-			select: { name: " WFO (Office) " },
-		},
-		Appraisal: {
-			checkbox: true,
-		},
 	},
 };
 
-const defaultWorkLogPage = {
-	id: "default-work-log-id",
+const defaultReleasePage = {
+	id: "default-release-item-id",
 	created_time: "2026-09-02T08:00:00.000Z",
 	last_edited_time: "2026-09-02T09:00:00.000Z",
 	properties: {},
 };
 
-const expectedWorkLog = {
-	id: "work-log-id",
+const expectedReleaseItem = {
+	id: "release-item-id",
 	createdTime: "2026-09-01T08:00:00.000Z",
 	lastEditedTime: "2026-09-01T09:00:00.000Z",
-	update: "Daily update",
-	date: "2026-09-01",
-	category: "Office Work",
-	type: "Meeting",
-	workMode: "WFO (Office)",
-	comment: "Built endpoint",
-	wentWrong: "Blocked by review",
-	appraisal: true,
-	projectIds: [projectId],
+	releaseItem: "Release CRI-1234",
+	componentName: "cortellis-admin",
+	deploymentType: "Backstage",
+	versionNumber: "76.0.193-9862616",
+	branch: "release/76.0",
+	formalAnnouncedDate: "2026-09-01",
+	confirmedReleaseDate: "2026-09-03",
+	notes: "TAR tracked in release notes",
 	jiraIds: [jiraId],
-	companyIds: ["11111111-1111-1111-1111-111111111111"],
-	teamIds: ["22222222-2222-2222-2222-222222222222"],
-	jiraStatuses: ["Blocked", "Done"],
+	jiraStatuses: ["Done", "Blocked"],
 	sprintIds: ["44444444-4444-4444-4444-444444444444"],
 	spilloverCount: 3,
 };
 
-const expectedDefaultWorkLog = {
-	id: "default-work-log-id",
+const expectedDefaultReleaseItem = {
+	id: "default-release-item-id",
 	createdTime: "2026-09-02T08:00:00.000Z",
 	lastEditedTime: "2026-09-02T09:00:00.000Z",
-	update: "",
-	date: null,
-	category: null,
-	type: null,
-	workMode: null,
-	comment: "",
-	wentWrong: "",
-	appraisal: false,
-	projectIds: [],
+	releaseItem: "",
+	componentName: "",
+	deploymentType: null,
+	versionNumber: "",
+	branch: "",
+	formalAnnouncedDate: null,
+	confirmedReleaseDate: null,
+	notes: "",
 	jiraIds: [],
-	companyIds: [],
-	teamIds: [],
 	jiraStatuses: [],
 	sprintIds: [],
 	spilloverCount: 0,
@@ -356,7 +347,7 @@ const invalidParameterResponse = (parameter: string) => ({
 function stubNotionFetch() {
 	const fetchMock = vi.fn().mockResolvedValue(
 		Response.json({
-			results: [fullWorkLogPage, defaultWorkLogPage],
+			results: [fullReleasePage, defaultReleasePage],
 			has_more: false,
 			next_cursor: null,
 		}),
@@ -383,7 +374,7 @@ function expectNotionRequest(
 	expectedBody: unknown,
 ) {
 	expect(fetchMock).toHaveBeenCalledWith(
-		"https://api.notion.com/v1/data_sources/test-work-logs-data-source-id/query",
+		"https://api.notion.com/v1/data_sources/test-release-items-data-source-id/query",
 		expect.objectContaining({
 			method: "POST",
 			headers: {
@@ -399,13 +390,13 @@ function expectNotionRequest(
 	expect(JSON.parse(String(requestInit.body))).toEqual(expectedBody);
 }
 
-describe("Work Log API routes", () => {
+describe("Release API routes", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
 	});
 
 	it.each(routeCases)(
-		"queries Notion and maps Work Logs for $path",
+		"queries Notion and maps Release Items for $path",
 		async ({ path, expectedBody }) => {
 			const fetchMock = stubNotionFetch();
 
@@ -414,7 +405,7 @@ describe("Work Log API routes", () => {
 			expect(response.status).toBe(200);
 			expectNotionRequest(fetchMock, expectedBody);
 			expect(await response.json()).toEqual({
-				data: [expectedWorkLog, expectedDefaultWorkLog],
+				data: [expectedReleaseItem, expectedDefaultReleaseItem],
 				count: 2,
 				hasMore: false,
 				nextCursor: null,
@@ -423,12 +414,11 @@ describe("Work Log API routes", () => {
 	);
 
 	it.each([
-		["projectId", "/api/work-logs?projectId=invalid"],
-		["jiraId", "/api/work-logs?jiraId=invalid"],
-		["from", "/api/work-logs?from=2026-99-99"],
-		["to", "/api/work-logs?to=not-a-date"],
+		["jiraId", "/api/releases?jiraId=invalid"],
+		["from", "/api/releases?from=2026-99-99"],
+		["to", "/api/releases?to=not-a-date"],
 	])(
-		"returns 400 for invalid Work Log %s without calling Notion",
+		"returns 400 for invalid Release %s without calling Notion",
 		async (parameter, path) => {
 			const fetchMock = stubNotionFetch();
 
@@ -440,22 +430,22 @@ describe("Work Log API routes", () => {
 		},
 	);
 
-	it("ignores empty select query parameters consistently", async () => {
+	it("ignores empty text query parameters consistently", async () => {
 		const fetchMock = stubNotionFetch();
 
-		const response = await fetchWorker("/api/work-logs?category=%20&type=&workMode=");
+		const response = await fetchWorker("/api/releases?deploymentType=%20&component=");
 
 		expect(response.status).toBe(200);
 		expectNotionRequest(fetchMock, {
 			page_size: 100,
-			sorts: dateSort,
+			sorts: announcedDateSort,
 		});
 	});
 
-	it("lets unknown Work Log subpaths fall through to the main Worker 404", async () => {
+	it("lets unknown Release subpaths fall through to the main Worker 404", async () => {
 		const fetchMock = stubNotionFetch();
 
-		const response = await fetchWorker("/api/work-logs/random");
+		const response = await fetchWorker("/api/releases/random");
 
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(response.status).toBe(404);
@@ -464,10 +454,10 @@ describe("Work Log API routes", () => {
 		});
 	});
 
-	it("returns null from the Work Log route handler for unknown subpaths", async () => {
-		const response = await handleWorkLogRoutes(
-			new IncomingRequest("http://example.com/api/work-logs/random"),
-			new URL("http://example.com/api/work-logs/random"),
+	it("returns null from the Release route handler for unknown subpaths", async () => {
+		const response = await handleReleaseRoutes(
+			new IncomingRequest("http://example.com/api/releases/foo/bar"),
+			new URL("http://example.com/api/releases/foo/bar"),
 			testEnv,
 		);
 

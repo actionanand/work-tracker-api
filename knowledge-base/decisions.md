@@ -212,6 +212,20 @@ A Work Log records what happened on a date. A JIRA can have multiple Work Logs, 
 
 Accepted and implemented.
 
+## 17. Treat Release Items as Component-Level Read Models
+
+**Decision**
+
+Implement Release Items as a read-only API where one JIRA can have multiple Release Items.
+
+**Reason**
+
+A single ticket can release multiple components or micro-frontends. Release metadata should remain component-specific, and version values must stay as strings because real release identifiers may include dots, hashes, hyphens, prefixes, or other non-numeric content.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**

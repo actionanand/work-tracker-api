@@ -58,11 +58,16 @@ src/
     │   ├── project.filters.ts
     │   ├── project.service.ts
     │   └── project.routes.ts
-    └── work-logs/
-        ├── work-log.mapper.ts
-        ├── work-log.filters.ts
-        ├── work-log.service.ts
-        └── work-log.routes.ts
+    ├── work-logs/
+    │   ├── work-log.mapper.ts
+    │   ├── work-log.filters.ts
+    │   ├── work-log.service.ts
+    │   └── work-log.routes.ts
+    └── releases/
+        ├── release.mapper.ts
+        ├── release.filters.ts
+        ├── release.service.ts
+        └── release.routes.ts
 ```
 
 ## Feature-Based Organization
@@ -79,6 +84,7 @@ src/features/companies/
 src/features/teams/
 src/features/projects/
 src/features/work-logs/
+src/features/releases/
 ```
 
 ## Shared Code
@@ -95,6 +101,7 @@ export interface Env {
   COMPANIES_DATA_SOURCE_ID: string;
   TEAMS_DATA_SOURCE_ID: string;
   WORK_LOGS_DATA_SOURCE_ID: string;
+  RELEASE_ITEMS_DATA_SOURCE_ID: string;
 }
 ```
 
@@ -130,11 +137,10 @@ The pattern means:
 
 Potential future modules include:
 
-- `releases/`
 - `feedback/`
 - `work-links/`
 
-Sprints, Sprint Allocations, Companies, Teams, Projects, and Work Logs are implemented. The other modules listed above are not implemented yet.
+Sprints, Sprint Allocations, Companies, Teams, Projects, Work Logs, and Release Items are implemented. The other modules listed above are not implemented yet.
 
 ## Thin Entry Point
 
@@ -153,5 +159,6 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 - [Sprint API](sprint-api.md)
 - [Company, Team, and Project API](company-team-project-api.md)
 - [Work Log API](work-log-api.md)
+- [Release API](release-api.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)

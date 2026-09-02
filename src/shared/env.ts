@@ -9,4 +9,6 @@ export interface Env {
 	TEAMS_DATA_SOURCE_ID: string;
 
 	WORK_LOGS_DATA_SOURCE_ID: string;
+
+	RELEASE_ITEMS_DATA_SOURCE_ID: string;
 }

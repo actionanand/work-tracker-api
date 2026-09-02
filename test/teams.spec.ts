@@ -15,6 +15,7 @@ const testEnv: Env = {
 	COMPANIES_DATA_SOURCE_ID: "test-companies-data-source-id",
 	TEAMS_DATA_SOURCE_ID: "test-teams-data-source-id",
 	WORK_LOGS_DATA_SOURCE_ID: "test-work-logs-data-source-id",
+	RELEASE_ITEMS_DATA_SOURCE_ID: "test-release-items-data-source-id",
 };
 
 const activeFilter = {

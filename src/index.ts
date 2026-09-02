@@ -1,5 +1,6 @@
 import { handleCompanyRoutes } from "./features/companies/company.routes";
 import { handleProjectRoutes } from "./features/projects/project.routes";
+import { handleReleaseRoutes } from "./features/releases/release.routes";
 import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
 import { handleSprintRoutes } from "./features/sprints/sprint.routes";
 import { handleTeamRoutes } from "./features/teams/team.routes";
@@ -66,6 +67,12 @@ export default {
 
 		if (workLogResponse) {
 			return workLogResponse;
+		}
+
+		const releaseResponse = await handleReleaseRoutes(request, url, env);
+
+		if (releaseResponse) {
+			return releaseResponse;
 		}
 
 		return Response.json(
