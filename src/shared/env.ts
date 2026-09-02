@@ -7,4 +7,6 @@ export interface Env {
 	PROJECTS_DATA_SOURCE_ID: string;
 	COMPANIES_DATA_SOURCE_ID: string;
 	TEAMS_DATA_SOURCE_ID: string;
+
+	WORK_LOGS_DATA_SOURCE_ID: string;
 }

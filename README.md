@@ -63,11 +63,16 @@ src/
     │   ├── team.filters.ts
     │   ├── team.service.ts
     │   └── team.routes.ts
-    └── projects/
-        ├── project.mapper.ts
-        ├── project.filters.ts
-        ├── project.service.ts
-        └── project.routes.ts
+    ├── projects/
+    │   ├── project.mapper.ts
+    │   ├── project.filters.ts
+    │   ├── project.service.ts
+    │   └── project.routes.ts
+    └── work-logs/
+        ├── work-log.mapper.ts
+        ├── work-log.filters.ts
+        ├── work-log.service.ts
+        └── work-log.routes.ts
 ```
 
 Layer responsibilities:
@@ -86,6 +91,7 @@ Layer responsibilities:
 | `src/features/companies/*` | Company routes, filters, service orchestration, and mapping. |
 | `src/features/teams/*` | Team routes, filters, service orchestration, and mapping. |
 | `src/features/projects/*` | Project routes, filters, service orchestration, mapping, and internal Company-to-Project resolution. |
+| `src/features/work-logs/*` | Work Log routes, filters, service orchestration, and mapping. |
 
 ## API Endpoints
 
@@ -111,6 +117,8 @@ Layer responsibilities:
 | `GET` | `/api/teams/active` | Active Teams. |
 | `GET` | `/api/projects` | All Projects from the configured Notion data source. |
 | `GET` | `/api/projects/active` | Active Projects. |
+| `GET` | `/api/work-logs` | All Work Logs from the configured Notion data source, sorted by Date descending. |
+| `GET` | `/api/work-logs/appraisal` | Work Logs marked for appraisal. |
 
 Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
@@ -146,6 +154,7 @@ JIRA list responses use this structure:
 - Notion Companies Data Source ID
 - Notion Teams Data Source ID
 - Notion Projects Data Source ID
+- Notion Work Logs Data Source ID
 
 ## Setup
 
@@ -172,7 +181,8 @@ Configure non-secret IDs in `wrangler.jsonc`:
   "SPRINT_ALLOCATIONS_DATA_SOURCE_ID": "your-sprint-allocations-data-source-id",
   "PROJECTS_DATA_SOURCE_ID": "your-projects-data-source-id",
   "COMPANIES_DATA_SOURCE_ID": "your-companies-data-source-id",
-  "TEAMS_DATA_SOURCE_ID": "your-teams-data-source-id"
+  "TEAMS_DATA_SOURCE_ID": "your-teams-data-source-id",
+  "WORK_LOGS_DATA_SOURCE_ID": "your-work-logs-data-source-id"
 }
 ```
 
@@ -202,6 +212,7 @@ curl -s http://localhost:8787/api/sprint-allocations/current | jq
 curl -s http://localhost:8787/api/companies/active | jq
 curl -s http://localhost:8787/api/teams?companyId=company-page-id | jq
 curl -s http://localhost:8787/api/projects?companyId=company-page-id | jq
+curl -s http://localhost:8787/api/work-logs?from=2026-09-01\&to=2026-09-30 | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.
@@ -234,5 +245,6 @@ Living technical references:
 - [JIRA API](knowledge-base/jira-api.md)
 - [Sprint API](knowledge-base/sprint-api.md)
 - [Company, Team, and Project API](knowledge-base/company-team-project-api.md)
+- [Work Log API](knowledge-base/work-log-api.md)
 - [Notion Integration](knowledge-base/notion-integration.md)
 - [Decisions](knowledge-base/decisions.md)

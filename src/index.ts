@@ -3,6 +3,7 @@ import { handleProjectRoutes } from "./features/projects/project.routes";
 import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
 import { handleSprintRoutes } from "./features/sprints/sprint.routes";
 import { handleTeamRoutes } from "./features/teams/team.routes";
+import { handleWorkLogRoutes } from "./features/work-logs/work-log.routes";
 import { handleJiraRoutes } from "./features/jiras/jira.routes";
 import type { Env } from "./shared/env";
 
@@ -59,6 +60,12 @@ export default {
 
 		if (projectResponse) {
 			return projectResponse;
+		}
+
+		const workLogResponse = await handleWorkLogRoutes(request, url, env);
+
+		if (workLogResponse) {
+			return workLogResponse;
 		}
 
 		return Response.json(

@@ -198,6 +198,20 @@ Relation-name resolution would add extra Notion lookups and possible N+1 behavio
 
 Accepted.
 
+## 16. Treat Work Logs as Historical Daily Records
+
+**Decision**
+
+Implement Work Logs as a read-only historical API and keep Work Log records independent from Sprint lifecycle cleanup.
+
+**Reason**
+
+A Work Log records what happened on a date. A JIRA can have multiple Work Logs, and a Work Log can exist without a JIRA. These records should remain queryable after a Sprint ends.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**
