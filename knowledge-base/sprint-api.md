@@ -22,6 +22,12 @@ The following optional query parameters are implemented for `/api/sprints` and `
 | `from=YYYY-MM-DD` | `End Date` is on or after the supplied date. |
 | `to=YYYY-MM-DD` | `Start Date` is on or before the supplied date. |
 
+`/api/sprints/history` also supports:
+
+| Query Parameter | Behavior |
+| --- | --- |
+| `companyId=<company-page-id>` | Resolve matching Projects for the Company, then query historical Sprints whose `Project` relation contains one of those Project IDs. |
+
 Date parameters are validated before Notion is called. Invalid dates return HTTP 400:
 
 ```json
@@ -32,7 +38,17 @@ Date parameters are validated before Notion is called. Invalid dates return HTTP
 }
 ```
 
-Company-based Sprint history is planned and should become straightforward after Projects/Companies data sources are integrated. Company filtering is not implemented yet.
+Relation-ID query parameters such as `projectId` and `companyId` must be valid Notion page IDs. Hyphenated UUID-shaped IDs and compact 32-character hexadecimal IDs are accepted. Invalid IDs return HTTP 400 before Notion is called:
+
+```json
+{
+  "error": "Invalid query parameter",
+  "parameter": "projectId",
+  "message": "Expected a valid Notion page ID"
+}
+```
+
+Company-based Sprint history is implemented through the Projects data source. If a Company has no matching Projects, the Worker returns an empty collection without querying Sprints.
 
 ## Sprint Filters
 
@@ -42,6 +58,8 @@ Company-based Sprint history is planned and should become straightforward after 
 | `/api/sprints/history` | `Active = false` |
 
 Query parameters are composed with `and` filters in the Notion data-source query body. Filtering is not performed by fetching all rows and filtering in JavaScript.
+
+When a Company resolves to multiple Projects, the Project relation portion of the Sprint filter is composed with Notion `or`.
 
 ## Mapped Sprint Fields
 
@@ -86,6 +104,8 @@ The following optional query parameters are implemented for `/api/sprint-allocat
 | `jiraId=<jira-page-id>` | `JIRA` relation contains the supplied page ID. |
 
 If both are provided, they are composed with a Notion `and` filter.
+
+`sprintId` and `jiraId` must be valid Notion page IDs.
 
 ## Sprint Allocation Filters
 
@@ -141,6 +161,8 @@ Current tests cover:
 - Sprint Allocation current/sprint/JIRA filters
 - combined Sprint Allocation relation filters
 - Sprint Active rollup mapping fallbacks
+- Sprint history filtering by Company through Projects
+- Company-to-Projects pagination during Sprint history resolution
 - unknown subpath fallthrough behavior
 
 ## Related Docs
@@ -148,3 +170,4 @@ Current tests cover:
 - [Architecture](architecture.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)
+- [Company, Team, and Project API](company-team-project-api.md)

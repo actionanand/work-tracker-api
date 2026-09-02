@@ -48,11 +48,26 @@ src/
     │   ├── sprint.filters.ts
     │   ├── sprint.service.ts
     │   └── sprint.routes.ts
-    └── sprint-allocations/
-        ├── sprint-allocation.mapper.ts
-        ├── sprint-allocation.filters.ts
-        ├── sprint-allocation.service.ts
-        └── sprint-allocation.routes.ts
+    ├── sprint-allocations/
+    │   ├── sprint-allocation.mapper.ts
+    │   ├── sprint-allocation.filters.ts
+    │   ├── sprint-allocation.service.ts
+    │   └── sprint-allocation.routes.ts
+    ├── companies/
+    │   ├── company.mapper.ts
+    │   ├── company.filters.ts
+    │   ├── company.service.ts
+    │   └── company.routes.ts
+    ├── teams/
+    │   ├── team.mapper.ts
+    │   ├── team.filters.ts
+    │   ├── team.service.ts
+    │   └── team.routes.ts
+    └── projects/
+        ├── project.mapper.ts
+        ├── project.filters.ts
+        ├── project.service.ts
+        └── project.routes.ts
 ```
 
 Layer responsibilities:
@@ -60,7 +75,7 @@ Layer responsibilities:
 | File | Responsibility |
 | --- | --- |
 | `src/index.ts` | Cloudflare Worker entry point, root health response, route delegation, fallback 404. |
-| `src/shared/env.ts` | Cloudflare binding interface for `NOTION_TOKEN` and `JIRAS_DATA_SOURCE_ID`. |
+| `src/shared/env.ts` | Cloudflare binding interface for secrets and data source IDs. |
 | `src/shared/notion/notion-client.ts` | Shared Notion data-source query client, Notion API version, common error handling. |
 | `src/features/jiras/jira.routes.ts` | JIRA HTTP route selection and route-to-filter mapping. |
 | `src/features/jiras/jira.service.ts` | JIRA query orchestration through the shared Notion client and mapper. |
@@ -68,6 +83,9 @@ Layer responsibilities:
 | `src/features/jiras/jira.mapper.ts` | Raw Notion page to clean JIRA API model mapping. |
 | `src/features/sprints/*` | Sprint routes, filters, service orchestration, and mapping. |
 | `src/features/sprint-allocations/*` | Sprint Allocation routes, filters, service orchestration, and mapping. |
+| `src/features/companies/*` | Company routes, filters, service orchestration, and mapping. |
+| `src/features/teams/*` | Team routes, filters, service orchestration, and mapping. |
+| `src/features/projects/*` | Project routes, filters, service orchestration, mapping, and internal Company-to-Project resolution. |
 
 ## API Endpoints
 
@@ -87,6 +105,14 @@ Layer responsibilities:
 | `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
 | `GET` | `/api/sprint-allocations` | All Sprint Allocations from the configured Notion data source. |
 | `GET` | `/api/sprint-allocations/current` | Sprint Allocations whose related Sprint is active. |
+| `GET` | `/api/companies` | All Companies from the configured Notion data source. |
+| `GET` | `/api/companies/active` | Active Companies. |
+| `GET` | `/api/teams` | All Teams from the configured Notion data source. |
+| `GET` | `/api/teams/active` | Active Teams. |
+| `GET` | `/api/projects` | All Projects from the configured Notion data source. |
+| `GET` | `/api/projects/active` | Active Projects. |
+
+Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
 Root response:
 
@@ -117,6 +143,9 @@ JIRA list responses use this structure:
 - Notion JIRAs Data Source ID
 - Notion Sprints Data Source ID
 - Notion Sprint Allocations Data Source ID
+- Notion Companies Data Source ID
+- Notion Teams Data Source ID
+- Notion Projects Data Source ID
 
 ## Setup
 
@@ -140,7 +169,10 @@ Configure non-secret IDs in `wrangler.jsonc`:
 "vars": {
   "JIRAS_DATA_SOURCE_ID": "your-jiras-data-source-id",
   "SPRINTS_DATA_SOURCE_ID": "your-sprints-data-source-id",
-  "SPRINT_ALLOCATIONS_DATA_SOURCE_ID": "your-sprint-allocations-data-source-id"
+  "SPRINT_ALLOCATIONS_DATA_SOURCE_ID": "your-sprint-allocations-data-source-id",
+  "PROJECTS_DATA_SOURCE_ID": "your-projects-data-source-id",
+  "COMPANIES_DATA_SOURCE_ID": "your-companies-data-source-id",
+  "TEAMS_DATA_SOURCE_ID": "your-teams-data-source-id"
 }
 ```
 
@@ -167,6 +199,9 @@ curl -s http://localhost:8787/api/jiras/blocked | jq
 curl -s http://localhost:8787/api/jiras/CRI-1234 | jq
 curl -s http://localhost:8787/api/sprints/active | jq
 curl -s http://localhost:8787/api/sprint-allocations/current | jq
+curl -s http://localhost:8787/api/companies/active | jq
+curl -s http://localhost:8787/api/teams?companyId=company-page-id | jq
+curl -s http://localhost:8787/api/projects?companyId=company-page-id | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.
@@ -198,5 +233,6 @@ Living technical references:
 - [Architecture](knowledge-base/architecture.md)
 - [JIRA API](knowledge-base/jira-api.md)
 - [Sprint API](knowledge-base/sprint-api.md)
+- [Company, Team, and Project API](knowledge-base/company-team-project-api.md)
 - [Notion Integration](knowledge-base/notion-integration.md)
 - [Decisions](knowledge-base/decisions.md)

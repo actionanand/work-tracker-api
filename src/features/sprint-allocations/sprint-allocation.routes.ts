@@ -1,4 +1,5 @@
 import type { Env } from "../../shared/env";
+import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
 import {
 	combineSprintAllocationFilters,
@@ -33,19 +34,27 @@ const sprintAllocationRouteConfigs = new Map<
 function buildQueryFilter(
 	url: URL,
 	config: SprintAllocationRouteConfig,
-): NotionQueryFilter | undefined {
+): NotionQueryFilter | Response | undefined {
 	if (!config.supportsQueryFilters) {
 		return config.baseFilter;
 	}
 
+	const sprintId = parseNotionIdParam(url, "sprintId");
+
+	if (sprintId instanceof Response) {
+		return sprintId;
+	}
+
+	const jiraId = parseNotionIdParam(url, "jiraId");
+
+	if (jiraId instanceof Response) {
+		return jiraId;
+	}
+
 	return combineSprintAllocationFilters([
 		config.baseFilter,
-		url.searchParams.get("sprintId")
-			? sprintAllocationFilters.sprint(url.searchParams.get("sprintId") ?? "")
-			: undefined,
-		url.searchParams.get("jiraId")
-			? sprintAllocationFilters.jira(url.searchParams.get("jiraId") ?? "")
-			: undefined,
+		sprintId ? sprintAllocationFilters.sprint(sprintId) : undefined,
+		jiraId ? sprintAllocationFilters.jira(jiraId) : undefined,
 	]);
 }
 
@@ -60,8 +69,14 @@ export async function handleSprintAllocationRoutes(
 		return null;
 	}
 
+	const filter = buildQueryFilter(url, config);
+
+	if (filter instanceof Response) {
+		return filter;
+	}
+
 	try {
-		return Response.json(await listSprintAllocations(env, buildQueryFilter(url, config)));
+		return Response.json(await listSprintAllocations(env, filter));
 	} catch (error) {
 		console.error(error);
 

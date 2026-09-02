@@ -1,5 +1,8 @@
+import { handleCompanyRoutes } from "./features/companies/company.routes";
+import { handleProjectRoutes } from "./features/projects/project.routes";
 import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
 import { handleSprintRoutes } from "./features/sprints/sprint.routes";
+import { handleTeamRoutes } from "./features/teams/team.routes";
 import { handleJiraRoutes } from "./features/jiras/jira.routes";
 import type { Env } from "./shared/env";
 
@@ -38,6 +41,24 @@ export default {
 
 		if (sprintAllocationResponse) {
 			return sprintAllocationResponse;
+		}
+
+		const companyResponse = await handleCompanyRoutes(request, url, env);
+
+		if (companyResponse) {
+			return companyResponse;
+		}
+
+		const teamResponse = await handleTeamRoutes(request, url, env);
+
+		if (teamResponse) {
+			return teamResponse;
+		}
+
+		const projectResponse = await handleProjectRoutes(request, url, env);
+
+		if (projectResponse) {
+			return projectResponse;
 		}
 
 		return Response.json(

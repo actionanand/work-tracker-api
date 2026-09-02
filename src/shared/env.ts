@@ -1,6 +1,10 @@
 export interface Env {
 	NOTION_TOKEN: string;
+
 	JIRAS_DATA_SOURCE_ID: string;
 	SPRINTS_DATA_SOURCE_ID: string;
 	SPRINT_ALLOCATIONS_DATA_SOURCE_ID: string;
+	PROJECTS_DATA_SOURCE_ID: string;
+	COMPANIES_DATA_SOURCE_ID: string;
+	TEAMS_DATA_SOURCE_ID: string;
 }

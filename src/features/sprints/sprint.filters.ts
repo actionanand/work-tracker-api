@@ -19,6 +19,21 @@ export const sprintFilters = {
 			contains: projectId,
 		},
 	}),
+	projects: (projectIds: string[]): NotionQueryFilter | undefined => {
+		const filters = projectIds.map((projectId) => sprintFilters.project(projectId));
+
+		if (filters.length === 0) {
+			return undefined;
+		}
+
+		if (filters.length === 1) {
+			return filters[0];
+		}
+
+		return {
+			or: filters,
+		};
+	},
 	from: (from: string): NotionQueryFilter => ({
 		property: "End Date",
 		date: {
@@ -31,7 +46,12 @@ export const sprintFilters = {
 			on_or_before: to,
 		},
 	}),
-} satisfies Record<string, NotionQueryFilter | ((value: string) => NotionQueryFilter)>;
+} satisfies Record<
+	string,
+	| NotionQueryFilter
+	| ((value: string) => NotionQueryFilter)
+	| ((values: string[]) => NotionQueryFilter | undefined)
+>;
 
 export function combineSprintFilters(
 	filters: Array<NotionQueryFilter | undefined>,

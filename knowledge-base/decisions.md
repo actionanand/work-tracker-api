@@ -174,15 +174,29 @@ Accepted.
 
 **Decision**
 
-Do not implement company filtering for Sprint history yet.
+Implement company filtering for Sprint history through the Projects data source instead of adding a direct Company relation to Sprints.
 
 **Reason**
 
-Company resolution belongs with future Projects/Companies data sources. Once those sources are integrated, company-based Sprint history should become a straightforward extension of the current server-side filter pattern.
+The Sprints data source relates to Projects, and Projects relate to Companies. Resolving Company to Project IDs keeps the Notion schema unchanged and still lets Sprints be filtered server-side in Notion.
 
 **Status**
 
-Planned.
+Accepted and implemented.
+
+## 15. Keep Relation Names Unresolved in API Responses
+
+**Decision**
+
+Continue returning relation IDs such as `projectIds`, `companyIds`, and `teamIds` rather than nested related objects.
+
+**Reason**
+
+Relation-name resolution would add extra Notion lookups and possible N+1 behavior. It should be designed as a separate feature.
+
+**Status**
+
+Accepted.
 
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 

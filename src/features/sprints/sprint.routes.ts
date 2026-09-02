@@ -1,8 +1,10 @@
 import type { Env } from "../../shared/env";
+import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type {
 	NotionQueryFilter,
 	NotionQuerySort,
 } from "../../shared/notion/notion-client";
+import { listProjectIdsByCompany } from "../projects/project.service";
 import { combineSprintFilters, sprintFilters } from "./sprint.filters";
 import { listSprints } from "./sprint.service";
 
@@ -10,6 +12,7 @@ interface SprintRouteConfig {
 	baseFilter?: NotionQueryFilter;
 	sorts?: NotionQuerySort[];
 	supportsQueryFilters: boolean;
+	supportsCompanyFilter?: boolean;
 }
 
 const sprintRouteConfigs = new Map<string, SprintRouteConfig>([
@@ -32,9 +35,17 @@ const sprintRouteConfigs = new Map<string, SprintRouteConfig>([
 			baseFilter: sprintFilters.history as NotionQueryFilter,
 			sorts: [{ property: "Start Date", direction: "descending" }],
 			supportsQueryFilters: true,
+			supportsCompanyFilter: true,
 		},
 	],
 ]);
+
+const emptySprintListResponse = {
+	data: [],
+	count: 0,
+	hasMore: false,
+	nextCursor: null,
+};
 
 function parseDateParam(url: URL, name: "from" | "to"): string | Response | undefined {
 	const value = url.searchParams.get(name);
@@ -69,10 +80,11 @@ function invalidDateResponse(parameter: "from" | "to"): Response {
 	);
 }
 
-function buildQueryFilter(
+async function buildQueryFilter(
 	url: URL,
 	config: SprintRouteConfig,
-): NotionQueryFilter | Response | undefined {
+	env: Env,
+): Promise<NotionQueryFilter | Response | undefined> {
 	if (!config.supportsQueryFilters) {
 		return config.baseFilter;
 	}
@@ -89,11 +101,32 @@ function buildQueryFilter(
 		return to;
 	}
 
+	const projectId = parseNotionIdParam(url, "projectId");
+
+	if (projectId instanceof Response) {
+		return projectId;
+	}
+
+	const companyId = config.supportsCompanyFilter
+		? parseNotionIdParam(url, "companyId")
+		: undefined;
+
+	if (companyId instanceof Response) {
+		return companyId;
+	}
+
+	const companyProjectIds = companyId
+		? await listProjectIdsByCompany(env, companyId)
+		: undefined;
+
+	if (companyProjectIds && companyProjectIds.length === 0) {
+		return Response.json(emptySprintListResponse);
+	}
+
 	return combineSprintFilters([
 		config.baseFilter,
-		url.searchParams.get("projectId")
-			? sprintFilters.project(url.searchParams.get("projectId") ?? "")
-			: undefined,
+		projectId ? sprintFilters.project(projectId) : undefined,
+		companyProjectIds ? sprintFilters.projects(companyProjectIds) : undefined,
 		from ? sprintFilters.from(from) : undefined,
 		to ? sprintFilters.to(to) : undefined,
 	]);
@@ -110,7 +143,7 @@ export async function handleSprintRoutes(
 		return null;
 	}
 
-	const filter = buildQueryFilter(url, config);
+	const filter = await buildQueryFilter(url, config, env);
 
 	if (filter instanceof Response) {
 		return filter;

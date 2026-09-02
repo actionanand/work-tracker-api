@@ -11,6 +11,9 @@ const testEnv: Env = {
 	JIRAS_DATA_SOURCE_ID: "test-jiras-data-source-id",
 	SPRINTS_DATA_SOURCE_ID: "test-sprints-data-source-id",
 	SPRINT_ALLOCATIONS_DATA_SOURCE_ID: "test-sprint-allocations-data-source-id",
+	PROJECTS_DATA_SOURCE_ID: "test-projects-data-source-id",
+	COMPANIES_DATA_SOURCE_ID: "test-companies-data-source-id",
+	TEAMS_DATA_SOURCE_ID: "test-teams-data-source-id",
 };
 
 const mappedJira = {

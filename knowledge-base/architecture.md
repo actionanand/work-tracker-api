@@ -38,11 +38,26 @@ src/
     │   ├── sprint.filters.ts
     │   ├── sprint.service.ts
     │   └── sprint.routes.ts
-    └── sprint-allocations/
-        ├── sprint-allocation.mapper.ts
-        ├── sprint-allocation.filters.ts
-        ├── sprint-allocation.service.ts
-        └── sprint-allocation.routes.ts
+    ├── sprint-allocations/
+    │   ├── sprint-allocation.mapper.ts
+    │   ├── sprint-allocation.filters.ts
+    │   ├── sprint-allocation.service.ts
+    │   └── sprint-allocation.routes.ts
+    ├── companies/
+    │   ├── company.mapper.ts
+    │   ├── company.filters.ts
+    │   ├── company.service.ts
+    │   └── company.routes.ts
+    ├── teams/
+    │   ├── team.mapper.ts
+    │   ├── team.filters.ts
+    │   ├── team.service.ts
+    │   └── team.routes.ts
+    └── projects/
+        ├── project.mapper.ts
+        ├── project.filters.ts
+        ├── project.service.ts
+        └── project.routes.ts
 ```
 
 ## Feature-Based Organization
@@ -55,6 +70,9 @@ The currently implemented features are:
 src/features/jiras/
 src/features/sprints/
 src/features/sprint-allocations/
+src/features/companies/
+src/features/teams/
+src/features/projects/
 ```
 
 ## Shared Code
@@ -67,6 +85,9 @@ export interface Env {
   JIRAS_DATA_SOURCE_ID: string;
   SPRINTS_DATA_SOURCE_ID: string;
   SPRINT_ALLOCATIONS_DATA_SOURCE_ID: string;
+  PROJECTS_DATA_SOURCE_ID: string;
+  COMPANIES_DATA_SOURCE_ID: string;
+  TEAMS_DATA_SOURCE_ID: string;
 }
 ```
 
@@ -107,7 +128,7 @@ Potential future modules include:
 - `feedback/`
 - `work-links/`
 
-Sprints and Sprint Allocations are implemented. The other modules listed above are not implemented yet.
+Sprints, Sprint Allocations, Companies, Teams, and Projects are implemented. The other modules listed above are not implemented yet.
 
 ## Thin Entry Point
 
@@ -124,5 +145,6 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 
 - [JIRA API](jira-api.md)
 - [Sprint API](sprint-api.md)
+- [Company, Team, and Project API](company-team-project-api.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)

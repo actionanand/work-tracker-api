@@ -22,6 +22,7 @@ interface QueryDataSourceOptions {
 	env: Env;
 	filter?: NotionQueryFilter;
 	sorts?: NotionQuerySort[];
+	startCursor?: string;
 }
 
 export async function queryNotionDataSource<TPage = unknown>({
@@ -29,6 +30,7 @@ export async function queryNotionDataSource<TPage = unknown>({
 	env,
 	filter,
 	sorts,
+	startCursor,
 }: QueryDataSourceOptions): Promise<NotionDataSourceQueryResponse<TPage>> {
 	const body: Record<string, unknown> = {
 		page_size: 100,
@@ -40,6 +42,10 @@ export async function queryNotionDataSource<TPage = unknown>({
 
 	if (sorts?.length) {
 		body.sorts = sorts;
+	}
+
+	if (startCursor) {
+		body.start_cursor = startCursor;
 	}
 
 	const response = await fetch(
@@ -62,4 +68,27 @@ export async function queryNotionDataSource<TPage = unknown>({
 	}
 
 	return response.json();
+}
+
+export async function queryAllNotionDataSourcePages<TPage = unknown>(
+	options: Omit<QueryDataSourceOptions, "startCursor">,
+): Promise<TPage[]> {
+	const results: TPage[] = [];
+	let startCursor: string | undefined;
+
+	do {
+		const response = await queryNotionDataSource<TPage>({
+			...options,
+			startCursor,
+		});
+
+		results.push(...response.results);
+		startCursor = response.next_cursor ?? undefined;
+
+		if (!response.has_more) {
+			break;
+		}
+	} while (startCursor);
+
+	return results;
 }

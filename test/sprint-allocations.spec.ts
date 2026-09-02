@@ -11,6 +11,9 @@ const testEnv: Env = {
 	JIRAS_DATA_SOURCE_ID: "test-jiras-data-source-id",
 	SPRINTS_DATA_SOURCE_ID: "test-sprints-data-source-id",
 	SPRINT_ALLOCATIONS_DATA_SOURCE_ID: "test-sprint-allocations-data-source-id",
+	PROJECTS_DATA_SOURCE_ID: "test-projects-data-source-id",
+	COMPANIES_DATA_SOURCE_ID: "test-companies-data-source-id",
+	TEAMS_DATA_SOURCE_ID: "test-teams-data-source-id",
 };
 
 const currentFilter = {
@@ -27,16 +30,22 @@ const currentFilter = {
 const sprintFilter = {
 	property: "Sprint",
 	relation: {
-		contains: "sprint-page-id",
+		contains: "44444444-4444-4444-4444-444444444444",
 	},
 };
 
 const jiraFilter = {
 	property: "JIRA",
 	relation: {
-		contains: "jira-page-id",
+		contains: "55555555-5555-5555-5555-555555555555",
 	},
 };
+
+const invalidParameterResponse = (parameter: string) => ({
+	error: "Invalid query parameter",
+	parameter,
+	message: "Expected a valid Notion page ID",
+});
 
 const routeCases = [
 	{
@@ -53,21 +62,21 @@ const routeCases = [
 		},
 	},
 	{
-		path: "/api/sprint-allocations?sprintId=sprint-page-id",
+		path: "/api/sprint-allocations?sprintId=44444444-4444-4444-4444-444444444444",
 		expectedBody: {
 			page_size: 100,
 			filter: sprintFilter,
 		},
 	},
 	{
-		path: "/api/sprint-allocations?jiraId=jira-page-id",
+		path: "/api/sprint-allocations?jiraId=55555555-5555-5555-5555-555555555555",
 		expectedBody: {
 			page_size: 100,
 			filter: jiraFilter,
 		},
 	},
 	{
-		path: "/api/sprint-allocations?sprintId=sprint-page-id&jiraId=jira-page-id",
+		path: "/api/sprint-allocations?sprintId=44444444-4444-4444-4444-444444444444&jiraId=55555555-5555-5555-5555-555555555555",
 		expectedBody: {
 			page_size: 100,
 			filter: {
@@ -84,10 +93,10 @@ const fullAllocationPage = {
 			title: [{ plain_text: "Sprint 42 - ABC-123" }],
 		},
 		Sprint: {
-			relation: [{ id: "sprint-page-id" }],
+			relation: [{ id: "44444444-4444-4444-4444-444444444444" }],
 		},
 		JIRA: {
-			relation: [{ id: "jira-page-id" }],
+			relation: [{ id: "55555555-5555-5555-5555-555555555555" }],
 		},
 		"Planned Days": {
 			number: 3,
@@ -144,8 +153,8 @@ const expectedAllocation = {
 	allocation: "Sprint 42 - ABC-123",
 	plannedDays: 3,
 	notes: "Backend work",
-	sprintIds: ["sprint-page-id"],
-	jiraIds: ["jira-page-id"],
+	sprintIds: ["44444444-4444-4444-4444-444444444444"],
+	jiraIds: ["55555555-5555-5555-5555-555555555555"],
 	sprintActive: true,
 };
 
@@ -258,6 +267,22 @@ describe("Sprint Allocation API routes", () => {
 		});
 	});
 
+	it.each([
+		["sprintId", "/api/sprint-allocations?sprintId=invalid"],
+		["jiraId", "/api/sprint-allocations?jiraId=invalid-uuid"],
+	])(
+		"returns 400 for invalid Sprint Allocation %s without calling Notion",
+		async (parameter, path) => {
+			const fetchMock = stubNotionFetch();
+
+			const response = await fetchWorker(path);
+
+			expect(fetchMock).not.toHaveBeenCalled();
+			expect(response.status).toBe(400);
+			expect(await response.json()).toEqual(invalidParameterResponse(parameter));
+		},
+	);
+
 	it("returns null from the Sprint Allocation route handler for unknown subpaths", async () => {
 		const response = await handleSprintAllocationRoutes(
 			new IncomingRequest("http://example.com/api/sprint-allocations/random"),
@@ -268,3 +293,4 @@ describe("Sprint Allocation API routes", () => {
 		expect(response).toBeNull();
 	});
 });
+
