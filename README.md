@@ -81,6 +81,7 @@ Layer responsibilities:
 | `GET` | `/api/jiras/appraisal` | JIRAs marked for appraisal. |
 | `GET` | `/api/jiras/demo-pending` | JIRAs requiring a demo with no demo date. |
 | `GET` | `/api/jiras/demoed` | JIRAs with a demo date. |
+| `GET` | `/api/jiras/:jiraKey` | Single JIRA lookup by JIRA Key, such as `/api/jiras/CRI-1234`. |
 | `GET` | `/api/sprints` | All Sprints from the configured Notion data source. |
 | `GET` | `/api/sprints/active` | Active Sprints. |
 | `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
@@ -163,6 +164,7 @@ Example checks:
 curl -s http://localhost:8787/ | jq
 curl -s http://localhost:8787/api/jiras | jq
 curl -s http://localhost:8787/api/jiras/blocked | jq
+curl -s http://localhost:8787/api/jiras/CRI-1234 | jq
 curl -s http://localhost:8787/api/sprints/active | jq
 curl -s http://localhost:8787/api/sprint-allocations/current | jq
 ```

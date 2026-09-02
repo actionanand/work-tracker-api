@@ -71,7 +71,7 @@ export function mapJira(page: NotionJiraPage): Jira {
 		createdTime: page.created_time,
 		lastEditedTime: page.last_edited_time,
 
-		jiraKey: plainText(p["JIRA Key"]?.title),
+		jiraKey: plainText(p["JIRA Key"]?.title).trim(),
 		summary: plainText(p["Summary"]?.rich_text),
 
 		status: p["Status"]?.status?.name ?? null,

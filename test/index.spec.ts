@@ -179,9 +179,13 @@ const routeCases = [
 ] as const;
 
 function stubNotionFetch() {
+	return stubNotionFetchWithResults([notionJiraPage]);
+}
+
+function stubNotionFetchWithResults(results: unknown[]) {
 	const fetchMock = vi.fn().mockResolvedValue(
 		Response.json({
-			results: [notionJiraPage],
+			results,
 			has_more: false,
 			next_cursor: null,
 		}),
@@ -234,8 +238,18 @@ function expectNotionPostBody(
 	}
 }
 
+function expectJiraKeyLookupBody(fetchMock: ReturnType<typeof vi.fn>, jiraKey: string) {
+	expectNotionPostBody(fetchMock, {
+		property: "JIRA Key",
+		title: {
+			equals: jiraKey,
+		},
+	});
+}
+
 describe("Work Tracker API worker", () => {
 	afterEach(() => {
+		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 	});
 
@@ -275,6 +289,68 @@ describe("Work Tracker API worker", () => {
 			});
 		},
 	);
+
+	it("returns one JIRA by JIRA key", async () => {
+		const fetchMock = stubNotionFetchWithResults([
+			{
+				...notionJiraPage,
+				properties: {
+					...notionJiraPage.properties,
+					"JIRA Key": {
+						title: [{ plain_text: " CRI-1234 " }],
+					},
+				},
+			},
+		]);
+
+		const response = await fetchWorker("/api/jiras/CRI-1234");
+
+		expect(response.status).toBe(200);
+		expectJiraKeyLookupBody(fetchMock, "CRI-1234");
+		expect(await response.json()).toEqual({
+			...mappedJira,
+			jiraKey: "CRI-1234",
+		});
+	});
+
+	it("decodes and trims the JIRA key path segment before querying Notion", async () => {
+		const fetchMock = stubNotionFetch();
+
+		const response = await fetchWorker("/api/jiras/%20CRI-1234%20");
+
+		expect(response.status).toBe(200);
+		expectJiraKeyLookupBody(fetchMock, "CRI-1234");
+	});
+
+	it("returns 404 when a JIRA key does not exist", async () => {
+		const fetchMock = stubNotionFetchWithResults([]);
+
+		const response = await fetchWorker("/api/jiras/CRI-404");
+
+		expect(response.status).toBe(404);
+		expectJiraKeyLookupBody(fetchMock, "CRI-404");
+		expect(await response.json()).toEqual({
+			error: "JIRA not found",
+		});
+	});
+
+	it("returns 500 when more than one JIRA has the same key", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const fetchMock = stubNotionFetchWithResults([notionJiraPage, notionJiraPage]);
+
+		const response = await fetchWorker("/api/jiras/CRI-1234");
+
+		expect(response.status).toBe(500);
+		expectJiraKeyLookupBody(fetchMock, "CRI-1234");
+		expect(consoleError).toHaveBeenCalledWith(
+			"Expected one JIRA for key CRI-1234, found 2",
+		);
+		expect(await response.json()).toEqual({
+			error: "Duplicate JIRA key found",
+		});
+
+		consoleError.mockRestore();
+	});
 
 	it("lets unknown JIRA subpaths fall through to the main Worker 404", async () => {
 		const fetchMock = stubNotionFetch();

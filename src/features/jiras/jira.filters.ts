@@ -63,4 +63,10 @@ export const jiraFilters = {
 			is_not_empty: true,
 		},
 	},
-} satisfies Record<string, NotionQueryFilter>;
+	byKey: (jiraKey: string): NotionQueryFilter => ({
+		property: "JIRA Key",
+		title: {
+			equals: jiraKey,
+		},
+	}),
+} satisfies Record<string, NotionQueryFilter | ((value: string) => NotionQueryFilter)>;

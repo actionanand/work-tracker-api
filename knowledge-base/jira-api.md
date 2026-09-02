@@ -13,8 +13,9 @@ This document describes the JIRA API functionality currently implemented in the 
 | `GET` | `/api/jiras/appraisal` | Query JIRAs marked for appraisal. |
 | `GET` | `/api/jiras/demo-pending` | Query JIRAs requiring a demo with no demo date. |
 | `GET` | `/api/jiras/demoed` | Query JIRAs with a demo date. |
+| `GET` | `/api/jiras/:jiraKey` | Query one JIRA by its `JIRA Key` title property. |
 
-Unknown paths such as `/api/jiras/random` are not handled by `handleJiraRoutes()` and fall through to the main Worker 404.
+Static JIRA routes are matched before dynamic JIRA key lookup. Unknown paths such as `/api/jiras/random` are not handled by `handleJiraRoutes()` and fall through to the main Worker 404.
 
 ## Response Shape
 
@@ -29,6 +30,20 @@ All JIRA list endpoints return:
 }
 ```
 
+`GET /api/jiras/:jiraKey` returns a single mapped JIRA object instead of the collection wrapper.
+
+If no matching JIRA exists, the endpoint returns:
+
+```json
+{
+  "error": "JIRA not found"
+}
+```
+
+with HTTP 404.
+
+If Notion returns more than one row for the same JIRA Key, the endpoint returns HTTP 500 instead of silently choosing one row.
+
 ## Filter Semantics
 
 Filtering is performed in the Notion data-source query request, not by filtering an already-fetched array in JavaScript.
@@ -41,6 +56,7 @@ Filtering is performed in the Notion data-source query request, not by filtering
 | `/api/jiras/appraisal` | `Appraisal = true` |
 | `/api/jiras/demo-pending` | `Demo Required = true AND Demoed Date is empty` |
 | `/api/jiras/demoed` | `Demoed Date is not empty` |
+| `/api/jiras/:jiraKey` | `JIRA Key = :jiraKey` |
 
 `In Active Sprint` and `Spillover` are Notion formula values returning booleans.
 
@@ -83,16 +99,6 @@ Relation-name resolution is intentionally deferred. Keeping raw IDs preserves re
 
 Old JIRAs should remain queryable later by JIRA key. Sprint history should not be destroyed by removing historical relations just to simplify active sprint views.
 
-## Future, Not Implemented
-
-Planned endpoint:
-
-```text
-GET /api/jiras/:jiraKey
-```
-
-This endpoint does not exist yet.
-
 ## Tests
 
 The current test suite is expected to pass with:
@@ -111,6 +117,8 @@ Current tests cover:
 - Notion request headers
 - Notion request body
 - filter payloads for each JIRA endpoint
+- lookup by JIRA Key
+- not-found and duplicate-key lookup behavior
 - unknown JIRA path fallthrough behavior
 
 Do not hardcode current sample test records as assumptions about production data.
