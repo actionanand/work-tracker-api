@@ -146,7 +146,7 @@ Accepted design goal.
 
 **Decision**
 
-Add Sprints and Sprint Allocations only after the current JIRA API and documentation are stable.
+Add Sprints and Sprint Allocations after the current JIRA API and documentation are stable.
 
 **Reason**
 
@@ -154,7 +154,7 @@ The JIRA feature establishes the reusable source structure and Notion integratio
 
 **Status**
 
-Planned next step.
+Accepted and implemented.
 
 ## 12. Keep Node 24 in `package.json` Engines
 
@@ -169,6 +169,20 @@ The repository owner uses it as the expected local Node version and reminder.
 **Status**
 
 Accepted.
+
+## 14. Defer Company-Based Sprint History Until Projects/Companies Exist
+
+**Decision**
+
+Do not implement company filtering for Sprint history yet.
+
+**Reason**
+
+Company resolution belongs with future Projects/Companies data sources. Once those sources are integrated, company-based Sprint history should become a straightforward extension of the current server-side filter pattern.
+
+**Status**
+
+Planned.
 
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 

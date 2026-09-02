@@ -29,7 +29,9 @@
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
 	"vars": {
-		"JIRAS_DATA_SOURCE_ID": "3cc87ffa-ee01-80b4-abcd-000ba40dd653"
+		"JIRAS_DATA_SOURCE_ID": "3cc87ffa-ee01-80b4-abcd-000ba40dd653",
+		"SPRINTS_DATA_SOURCE_ID": "3cc87ffa-ee01-8024-bc36-000b4954e5a9",
+		"SPRINT_ALLOCATIONS_DATA_SOURCE_ID": "3cd87ffa-ee01-80c9-bd21-000b92696f23"
 	}
 	/**
 	 * Static Assets

@@ -38,11 +38,21 @@ src/
 │   └── notion/
 │       └── notion-client.ts
 └── features/
-    └── jiras/
-        ├── jira.mapper.ts
-        ├── jira.filters.ts
-        ├── jira.service.ts
-        └── jira.routes.ts
+    ├── jiras/
+    │   ├── jira.mapper.ts
+    │   ├── jira.filters.ts
+    │   ├── jira.service.ts
+    │   └── jira.routes.ts
+    ├── sprints/
+    │   ├── sprint.mapper.ts
+    │   ├── sprint.filters.ts
+    │   ├── sprint.service.ts
+    │   └── sprint.routes.ts
+    └── sprint-allocations/
+        ├── sprint-allocation.mapper.ts
+        ├── sprint-allocation.filters.ts
+        ├── sprint-allocation.service.ts
+        └── sprint-allocation.routes.ts
 ```
 
 Layer responsibilities:
@@ -56,6 +66,8 @@ Layer responsibilities:
 | `src/features/jiras/jira.service.ts` | JIRA query orchestration through the shared Notion client and mapper. |
 | `src/features/jiras/jira.filters.ts` | Reusable Notion-side JIRA filter definitions. |
 | `src/features/jiras/jira.mapper.ts` | Raw Notion page to clean JIRA API model mapping. |
+| `src/features/sprints/*` | Sprint routes, filters, service orchestration, and mapping. |
+| `src/features/sprint-allocations/*` | Sprint Allocation routes, filters, service orchestration, and mapping. |
 
 ## API Endpoints
 
@@ -69,6 +81,11 @@ Layer responsibilities:
 | `GET` | `/api/jiras/appraisal` | JIRAs marked for appraisal. |
 | `GET` | `/api/jiras/demo-pending` | JIRAs requiring a demo with no demo date. |
 | `GET` | `/api/jiras/demoed` | JIRAs with a demo date. |
+| `GET` | `/api/sprints` | All Sprints from the configured Notion data source. |
+| `GET` | `/api/sprints/active` | Active Sprints. |
+| `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
+| `GET` | `/api/sprint-allocations` | All Sprint Allocations from the configured Notion data source. |
+| `GET` | `/api/sprint-allocations/current` | Sprint Allocations whose related Sprint is active. |
 
 Root response:
 
@@ -97,6 +114,8 @@ JIRA list responses use this structure:
 - Cloudflare account for production deployment
 - Notion Personal Access Token
 - Notion JIRAs Data Source ID
+- Notion Sprints Data Source ID
+- Notion Sprint Allocations Data Source ID
 
 ## Setup
 
@@ -118,7 +137,9 @@ Configure non-secret IDs in `wrangler.jsonc`:
 
 ```jsonc
 "vars": {
-  "JIRAS_DATA_SOURCE_ID": "your-data-source-id"
+  "JIRAS_DATA_SOURCE_ID": "your-jiras-data-source-id",
+  "SPRINTS_DATA_SOURCE_ID": "your-sprints-data-source-id",
+  "SPRINT_ALLOCATIONS_DATA_SOURCE_ID": "your-sprint-allocations-data-source-id"
 }
 ```
 
@@ -142,6 +163,8 @@ Example checks:
 curl -s http://localhost:8787/ | jq
 curl -s http://localhost:8787/api/jiras | jq
 curl -s http://localhost:8787/api/jiras/blocked | jq
+curl -s http://localhost:8787/api/sprints/active | jq
+curl -s http://localhost:8787/api/sprint-allocations/current | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.
@@ -172,5 +195,6 @@ Living technical references:
 
 - [Architecture](knowledge-base/architecture.md)
 - [JIRA API](knowledge-base/jira-api.md)
+- [Sprint API](knowledge-base/sprint-api.md)
 - [Notion Integration](knowledge-base/notion-integration.md)
 - [Decisions](knowledge-base/decisions.md)

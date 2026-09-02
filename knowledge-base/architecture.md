@@ -28,21 +28,33 @@ src/
 │   └── notion/
 │       └── notion-client.ts
 └── features/
-    └── jiras/
-        ├── jira.mapper.ts
-        ├── jira.filters.ts
-        ├── jira.service.ts
-        └── jira.routes.ts
+    ├── jiras/
+    │   ├── jira.mapper.ts
+    │   ├── jira.filters.ts
+    │   ├── jira.service.ts
+    │   └── jira.routes.ts
+    ├── sprints/
+    │   ├── sprint.mapper.ts
+    │   ├── sprint.filters.ts
+    │   ├── sprint.service.ts
+    │   └── sprint.routes.ts
+    └── sprint-allocations/
+        ├── sprint-allocation.mapper.ts
+        ├── sprint-allocation.filters.ts
+        ├── sprint-allocation.service.ts
+        └── sprint-allocation.routes.ts
 ```
 
 ## Feature-Based Organization
 
 Feature code lives under `src/features/<feature-name>/`. Each feature owns its routing, filtering, service orchestration, and mapping logic.
 
-The currently implemented feature is:
+The currently implemented features are:
 
 ```text
 src/features/jiras/
+src/features/sprints/
+src/features/sprint-allocations/
 ```
 
 ## Shared Code
@@ -53,6 +65,8 @@ src/features/jiras/
 export interface Env {
   NOTION_TOKEN: string;
   JIRAS_DATA_SOURCE_ID: string;
+  SPRINTS_DATA_SOURCE_ID: string;
+  SPRINT_ALLOCATIONS_DATA_SOURCE_ID: string;
 }
 ```
 
@@ -88,14 +102,12 @@ The pattern means:
 
 Potential future modules include:
 
-- `sprints/`
-- `sprint-allocations/`
 - `work-logs/`
 - `releases/`
 - `feedback/`
 - `work-links/`
 
-These modules are not implemented yet.
+Sprints and Sprint Allocations are implemented. The other modules listed above are not implemented yet.
 
 ## Thin Entry Point
 
@@ -111,5 +123,6 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 ## Related Docs
 
 - [JIRA API](jira-api.md)
+- [Sprint API](sprint-api.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)

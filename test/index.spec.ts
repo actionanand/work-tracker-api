@@ -9,6 +9,8 @@ const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 const testEnv: Env = {
 	NOTION_TOKEN: "test-notion-token",
 	JIRAS_DATA_SOURCE_ID: "test-jiras-data-source-id",
+	SPRINTS_DATA_SOURCE_ID: "test-sprints-data-source-id",
+	SPRINT_ALLOCATIONS_DATA_SOURCE_ID: "test-sprint-allocations-data-source-id",
 };
 
 const mappedJira = {

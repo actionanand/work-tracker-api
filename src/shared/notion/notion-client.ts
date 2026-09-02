@@ -6,6 +6,11 @@ export interface NotionQueryFilter {
 	[key: string]: unknown;
 }
 
+export interface NotionQuerySort {
+	property: string;
+	direction: "ascending" | "descending";
+}
+
 export interface NotionDataSourceQueryResponse<TPage = unknown> {
 	results: TPage[];
 	has_more: boolean;
@@ -16,12 +21,14 @@ interface QueryDataSourceOptions {
 	dataSourceId: string;
 	env: Env;
 	filter?: NotionQueryFilter;
+	sorts?: NotionQuerySort[];
 }
 
 export async function queryNotionDataSource<TPage = unknown>({
 	dataSourceId,
 	env,
 	filter,
+	sorts,
 }: QueryDataSourceOptions): Promise<NotionDataSourceQueryResponse<TPage>> {
 	const body: Record<string, unknown> = {
 		page_size: 100,
@@ -29,6 +36,10 @@ export async function queryNotionDataSource<TPage = unknown>({
 
 	if (filter) {
 		body.filter = filter;
+	}
+
+	if (sorts?.length) {
+		body.sorts = sorts;
 	}
 
 	const response = await fetch(

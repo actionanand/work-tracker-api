@@ -1,3 +1,5 @@
+import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
+import { handleSprintRoutes } from "./features/sprints/sprint.routes";
 import { handleJiraRoutes } from "./features/jiras/jira.routes";
 import type { Env } from "./shared/env";
 
@@ -20,6 +22,22 @@ export default {
 
 		if (jiraResponse) {
 			return jiraResponse;
+		}
+
+		const sprintResponse = await handleSprintRoutes(request, url, env);
+
+		if (sprintResponse) {
+			return sprintResponse;
+		}
+
+		const sprintAllocationResponse = await handleSprintAllocationRoutes(
+			request,
+			url,
+			env,
+		);
+
+		if (sprintAllocationResponse) {
+			return sprintAllocationResponse;
 		}
 
 		return Response.json(
