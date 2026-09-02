@@ -11,4 +11,6 @@ export interface Env {
 	WORK_LOGS_DATA_SOURCE_ID: string;
 
 	RELEASE_ITEMS_DATA_SOURCE_ID: string;
+
+	FEEDBACK_DATA_SOURCE_ID: string;
 }

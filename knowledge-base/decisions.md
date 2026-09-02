@@ -226,6 +226,20 @@ A single ticket can release multiple components or micro-frontends. Release meta
 
 Accepted and implemented.
 
+## 18. Keep Feedback as a Read-Only Evidence Log
+
+**Decision**
+
+Implement Feedback as a read-only API with Notion-side filters for appraisal, improvement/follow-up, negative feedback, related entities, select fields, and date range.
+
+**Reason**
+
+Feedback can come from managers, leads, colleagues, clients, or others and may be linked to Company, Project, and Team records. Keeping it read-only for now preserves the existing API boundary while making performance review and follow-up evidence queryable.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**

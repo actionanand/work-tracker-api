@@ -1,4 +1,5 @@
 import { handleCompanyRoutes } from "./features/companies/company.routes";
+import { handleFeedbackRoutes } from "./features/feedback/feedback.routes";
 import { handleProjectRoutes } from "./features/projects/project.routes";
 import { handleReleaseRoutes } from "./features/releases/release.routes";
 import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
@@ -73,6 +74,12 @@ export default {
 
 		if (releaseResponse) {
 			return releaseResponse;
+		}
+
+		const feedbackResponse = await handleFeedbackRoutes(request, url, env);
+
+		if (feedbackResponse) {
+			return feedbackResponse;
 		}
 
 		return Response.json(

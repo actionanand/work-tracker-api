@@ -73,11 +73,16 @@ src/
     │   ├── work-log.filters.ts
     │   ├── work-log.service.ts
     │   └── work-log.routes.ts
-    └── releases/
-        ├── release.mapper.ts
-        ├── release.filters.ts
-        ├── release.service.ts
-        └── release.routes.ts
+    ├── releases/
+    │   ├── release.mapper.ts
+    │   ├── release.filters.ts
+    │   ├── release.service.ts
+    │   └── release.routes.ts
+    └── feedback/
+        ├── feedback.mapper.ts
+        ├── feedback.filters.ts
+        ├── feedback.service.ts
+        └── feedback.routes.ts
 ```
 
 Layer responsibilities:
@@ -98,6 +103,7 @@ Layer responsibilities:
 | `src/features/projects/*` | Project routes, filters, service orchestration, mapping, and internal Company-to-Project resolution. |
 | `src/features/work-logs/*` | Work Log routes, filters, service orchestration, and mapping. |
 | `src/features/releases/*` | Release Item routes, filters, service orchestration, and mapping. |
+| `src/features/feedback/*` | Feedback routes, filters, service orchestration, and mapping. |
 
 ## API Endpoints
 
@@ -129,6 +135,10 @@ Layer responsibilities:
 | `GET` | `/api/releases/pending` | Release Items formally announced but not yet confirmed. |
 | `GET` | `/api/releases/confirmed` | Release Items with a confirmed release date. |
 | `GET` | `/api/releases/not-announced` | Release Items without a formal announced date. |
+| `GET` | `/api/feedback` | All Feedback from the configured Notion data source, sorted by Date descending. |
+| `GET` | `/api/feedback/appraisal` | Feedback with appraisal contexts. |
+| `GET` | `/api/feedback/improvement-follow-up` | Feedback marked as improvement or suggestion. |
+| `GET` | `/api/feedback/negative` | Negative Feedback. |
 
 Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
@@ -166,6 +176,7 @@ JIRA list responses use this structure:
 - Notion Projects Data Source ID
 - Notion Work Logs Data Source ID
 - Notion Release Items Data Source ID
+- Notion Feedback Data Source ID
 
 ## Setup
 
@@ -194,7 +205,8 @@ Configure non-secret IDs in `wrangler.jsonc`:
   "COMPANIES_DATA_SOURCE_ID": "your-companies-data-source-id",
   "TEAMS_DATA_SOURCE_ID": "your-teams-data-source-id",
   "WORK_LOGS_DATA_SOURCE_ID": "your-work-logs-data-source-id",
-  "RELEASE_ITEMS_DATA_SOURCE_ID": "your-release-items-data-source-id"
+  "RELEASE_ITEMS_DATA_SOURCE_ID": "your-release-items-data-source-id",
+  "FEEDBACK_DATA_SOURCE_ID": "your-feedback-data-source-id"
 }
 ```
 
@@ -226,6 +238,7 @@ curl -s http://localhost:8787/api/teams?companyId=company-page-id | jq
 curl -s http://localhost:8787/api/projects?companyId=company-page-id | jq
 curl -s http://localhost:8787/api/work-logs?from=2026-09-01\&to=2026-09-30 | jq
 curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage | jq
+curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.
@@ -260,5 +273,6 @@ Living technical references:
 - [Company, Team, and Project API](knowledge-base/company-team-project-api.md)
 - [Work Log API](knowledge-base/work-log-api.md)
 - [Release API](knowledge-base/release-api.md)
+- [Feedback API](knowledge-base/feedback-api.md)
 - [Notion Integration](knowledge-base/notion-integration.md)
 - [Decisions](knowledge-base/decisions.md)

@@ -16,6 +16,7 @@ const testEnv: Env = {
 	TEAMS_DATA_SOURCE_ID: "test-teams-data-source-id",
 	WORK_LOGS_DATA_SOURCE_ID: "test-work-logs-data-source-id",
 	RELEASE_ITEMS_DATA_SOURCE_ID: "test-release-items-data-source-id",
+	FEEDBACK_DATA_SOURCE_ID: "test-feedback-data-source-id",
 };
 
 const projectId = "33333333-3333-3333-3333-333333333333";
