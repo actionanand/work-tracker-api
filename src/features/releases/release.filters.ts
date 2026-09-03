@@ -35,6 +35,21 @@ export const releaseFilters = {
 			contains: jiraId,
 		},
 	}),
+	jiras: (jiraIds: string[]): NotionQueryFilter | undefined => {
+		const filters = jiraIds.map((jiraId) => releaseFilters.jira(jiraId));
+
+		if (filters.length === 0) {
+			return undefined;
+		}
+
+		if (filters.length === 1) {
+			return filters[0];
+		}
+
+		return {
+			or: filters,
+		};
+	},
 	deploymentType: (deploymentType: string): NotionQueryFilter => ({
 		property: "Deployment Type",
 		select: {
@@ -59,7 +74,12 @@ export const releaseFilters = {
 			on_or_before: to,
 		},
 	}),
-} satisfies Record<string, NotionQueryFilter | ((value: string) => NotionQueryFilter)>;
+} satisfies Record<
+	string,
+	| NotionQueryFilter
+	| ((value: string) => NotionQueryFilter)
+	| ((values: string[]) => NotionQueryFilter | undefined)
+>;
 
 export function combineReleaseFilters(
 	filters: Array<NotionQueryFilter | undefined>,

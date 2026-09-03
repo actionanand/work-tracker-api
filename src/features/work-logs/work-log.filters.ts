@@ -7,6 +7,12 @@ export const workLogFilters = {
 			equals: true,
 		},
 	},
+	hasDate: {
+		property: "Date",
+		date: {
+			is_not_empty: true,
+		},
+	},
 	from: (from: string): NotionQueryFilter => ({
 		property: "Date",
 		date: {
@@ -25,6 +31,21 @@ export const workLogFilters = {
 			contains: projectId,
 		},
 	}),
+	projects: (projectIds: string[]): NotionQueryFilter | undefined => {
+		const filters = projectIds.map((projectId) => workLogFilters.project(projectId));
+
+		if (filters.length === 0) {
+			return undefined;
+		}
+
+		if (filters.length === 1) {
+			return filters[0];
+		}
+
+		return {
+			or: filters,
+		};
+	},
 	jira: (jiraId: string): NotionQueryFilter => ({
 		property: "JIRAs",
 		relation: {
@@ -49,7 +70,12 @@ export const workLogFilters = {
 			equals: workMode,
 		},
 	}),
-} satisfies Record<string, NotionQueryFilter | ((value: string) => NotionQueryFilter)>;
+} satisfies Record<
+	string,
+	| NotionQueryFilter
+	| ((value: string) => NotionQueryFilter)
+	| ((values: string[]) => NotionQueryFilter | undefined)
+>;
 
 export function combineWorkLogFilters(
 	filters: Array<NotionQueryFilter | undefined>,

@@ -68,6 +68,10 @@ src/
     │   ├── project.filters.ts
     │   ├── project.service.ts
     │   └── project.routes.ts
+    ├── dashboard/
+    │   ├── dashboard.types.ts
+    │   ├── dashboard.service.ts
+    │   └── dashboard.routes.ts
     ├── work-logs/
     │   ├── work-log.mapper.ts
     │   ├── work-log.filters.ts
@@ -106,6 +110,7 @@ Layer responsibilities:
 | `src/features/companies/*` | Company routes, filters, service orchestration, and mapping. |
 | `src/features/teams/*` | Team routes, filters, service orchestration, and mapping. |
 | `src/features/projects/*` | Project routes, filters, service orchestration, mapping, and internal Company-to-Project resolution. |
+| `src/features/dashboard/*` | Dashboard aggregate route, scoped read orchestration, and dashboard response types. |
 | `src/features/work-logs/*` | Work Log routes, filters, service orchestration, and mapping. |
 | `src/features/releases/*` | Release Item routes, filters, service orchestration, and mapping. |
 | `src/features/feedback/*` | Feedback routes, filters, service orchestration, and mapping. |
@@ -135,6 +140,7 @@ Layer responsibilities:
 | `GET` | `/api/teams/active` | Active Teams. |
 | `GET` | `/api/projects` | All Projects from the configured Notion data source. |
 | `GET` | `/api/projects/active` | Active Projects. |
+| `GET` | `/api/dashboard` | Aggregate dashboard response with current Sprint, JIRA summaries/lists, recent Work Logs, release summary, feedback summary, and active Work Links. |
 | `GET` | `/api/work-logs` | All Work Logs from the configured Notion data source, sorted by Date descending. |
 | `GET` | `/api/work-logs/appraisal` | Work Logs marked for appraisal. |
 | `GET` | `/api/releases` | All Release Items from the configured Notion data source, sorted by Formal Announced Date descending. |
@@ -149,6 +155,8 @@ Layer responsibilities:
 | `GET` | `/api/work-links/active` | Active Work Links. |
 
 Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
+
+`GET /api/dashboard` supports optional `companyId` and `projectId` query parameters. Release dashboard sections are scoped through matching JIRAs because Release Items do not have a direct Project relation. Project-scoped Dashboard feedback is scoped through the Project's Company relation because Feedback `Project` is a rollup in the live schema.
 
 Selected endpoints support optional shallow relation enrichment with `include=relations`. Existing raw relation ID fields remain unchanged, and default responses are unchanged when `include` is absent.
 
@@ -248,6 +256,7 @@ curl -s http://localhost:8787/api/sprint-allocations/current | jq
 curl -s http://localhost:8787/api/companies/active | jq
 curl -s http://localhost:8787/api/teams?companyId=company-page-id | jq
 curl -s http://localhost:8787/api/projects?companyId=company-page-id | jq
+curl -s http://localhost:8787/api/dashboard?projectId=project-page-id | jq
 curl -s http://localhost:8787/api/work-logs?from=2026-09-01\&to=2026-09-30 | jq
 curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage | jq
 curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 | jq
@@ -289,6 +298,7 @@ Living technical references:
 - [Release API](knowledge-base/release-api.md)
 - [Feedback API](knowledge-base/feedback-api.md)
 - [Work Links API](knowledge-base/work-links-api.md)
+- [Dashboard API](knowledge-base/dashboard-api.md)
 - [Relation Enrichment](knowledge-base/relation-enrichment.md)
 - [Notion Integration](knowledge-base/notion-integration.md)
 - [Decisions](knowledge-base/decisions.md)

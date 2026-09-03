@@ -28,13 +28,14 @@ export const workLogDefaultSorts: NotionQuerySort[] = [
 export async function listWorkLogs(
 	env: Env,
 	filter?: NotionQueryFilter,
-	options: IncludeRelationsOption = {},
+	options: IncludeRelationsOption & { pageSize?: number } = {},
 ): Promise<WorkLogListResponse<WorkLog | EnrichedWorkLog>> {
 	const notion = await queryNotionDataSource<NotionWorkLogPage>({
 		dataSourceId: env.WORK_LOGS_DATA_SOURCE_ID,
 		env,
 		filter,
 		sorts: workLogDefaultSorts,
+		pageSize: options.pageSize,
 	});
 
 	const data = notion.results.map(mapWorkLog);

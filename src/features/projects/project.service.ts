@@ -55,3 +55,16 @@ export async function listProjectIdsByCompany(
 
 	return pages.map((page) => page.id);
 }
+
+export async function listCompanyIdsByProject(
+	env: Env,
+	projectId: string,
+): Promise<string[] | null> {
+	const pages = await queryAllNotionDataSourcePages<NotionProjectPage>({
+		dataSourceId: env.PROJECTS_DATA_SOURCE_ID,
+		env,
+	});
+	const page = pages.find((candidate) => candidate.id === projectId);
+
+	return page ? mapProject(page).companyIds : null;
+}

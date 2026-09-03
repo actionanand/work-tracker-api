@@ -23,6 +23,7 @@ interface QueryDataSourceOptions {
 	filter?: NotionQueryFilter;
 	sorts?: NotionQuerySort[];
 	startCursor?: string;
+	pageSize?: number;
 }
 
 export async function queryNotionDataSource<TPage = unknown>({
@@ -31,9 +32,10 @@ export async function queryNotionDataSource<TPage = unknown>({
 	filter,
 	sorts,
 	startCursor,
+	pageSize = 100,
 }: QueryDataSourceOptions): Promise<NotionDataSourceQueryResponse<TPage>> {
 	const body: Record<string, unknown> = {
-		page_size: 100,
+		page_size: pageSize,
 	};
 
 	if (filter) {

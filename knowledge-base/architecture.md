@@ -58,6 +58,10 @@ src/
     │   ├── project.filters.ts
     │   ├── project.service.ts
     │   └── project.routes.ts
+    ├── dashboard/
+    │   ├── dashboard.types.ts
+    │   ├── dashboard.service.ts
+    │   └── dashboard.routes.ts
     ├── work-logs/
     │   ├── work-log.mapper.ts
     │   ├── work-log.filters.ts
@@ -93,6 +97,7 @@ src/features/sprint-allocations/
 src/features/companies/
 src/features/teams/
 src/features/projects/
+src/features/dashboard/
 src/features/work-logs/
 src/features/releases/
 src/features/feedback/
@@ -156,9 +161,9 @@ The pattern means:
 | `*.filters.ts` | External API filter definitions. |
 | `*.mapper.ts` | Raw external data to API model mapping. |
 
-Potential future modules include Dashboard APIs and write APIs.
+Potential future modules include additional Dashboard APIs and write APIs.
 
-Sprints, Sprint Allocations, Companies, Teams, Projects, Work Logs, Release Items, Feedback, and Work Links are implemented. Dashboard APIs and write APIs are not implemented yet.
+Sprints, Sprint Allocations, Companies, Teams, Projects, Dashboard, Work Logs, Release Items, Feedback, and Work Links are implemented. Write APIs are not implemented yet.
 
 ## Thin Entry Point
 
@@ -180,6 +185,7 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 - [Release API](release-api.md)
 - [Feedback API](feedback-api.md)
 - [Work Links API](work-links-api.md)
+- [Dashboard API](dashboard-api.md)
 - [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)

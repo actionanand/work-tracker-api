@@ -1,6 +1,9 @@
 import type { Env } from "../../shared/env";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
-import { queryNotionDataSource } from "../../shared/notion/notion-client";
+import {
+	queryAllNotionDataSourcePages,
+	queryNotionDataSource,
+} from "../../shared/notion/notion-client";
 import {
 	enrichJira,
 	enrichJiras,
@@ -71,4 +74,23 @@ export async function getJiraByKey(
 	return options.includeRelations
 		? enrichJira(env, result.data[0])
 		: result.data[0];
+}
+
+export async function listJiraIdsByProjects(
+	env: Env,
+	projectIds: string[],
+): Promise<string[]> {
+	const filter = jiraFilters.projects(projectIds);
+
+	if (!filter) {
+		return [];
+	}
+
+	const pages = await queryAllNotionDataSourcePages<NotionJiraPage>({
+		dataSourceId: env.JIRAS_DATA_SOURCE_ID,
+		env,
+		filter,
+	});
+
+	return pages.map((page) => page.id);
 }

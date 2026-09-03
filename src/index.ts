@@ -1,4 +1,5 @@
 import { handleCompanyRoutes } from "./features/companies/company.routes";
+import { handleDashboardRoutes } from "./features/dashboard/dashboard.routes";
 import { handleFeedbackRoutes } from "./features/feedback/feedback.routes";
 import { handleProjectRoutes } from "./features/projects/project.routes";
 import { handleReleaseRoutes } from "./features/releases/release.routes";
@@ -29,6 +30,12 @@ export default {
 
 		if (jiraResponse) {
 			return jiraResponse;
+		}
+
+		const dashboardResponse = await handleDashboardRoutes(request, url, env);
+
+		if (dashboardResponse) {
+			return dashboardResponse;
 		}
 
 		const sprintResponse = await handleSprintRoutes(request, url, env);

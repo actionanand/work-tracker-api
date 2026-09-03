@@ -268,6 +268,24 @@ Default API responses must remain backward compatible and keep raw Notion relati
 
 Accepted and implemented.
 
+## 21. Add a Read-Only Dashboard Aggregate
+
+**Decision**
+
+Implement `GET /api/dashboard` as a read-only aggregate over existing feature services.
+
+**Reason**
+
+The client needs one display-ready dashboard response without duplicating cross-feature query orchestration. The dashboard still sends filters, sorts, and page size to Notion for each source instead of fetching broad datasets and filtering them in JavaScript.
+
+**Scope Notes**
+
+Company and Project scope are applied where the underlying Notion data source has direct or resolved support. Release dashboard sections resolve scoped JIRAs first, then filter Release Items through their direct `JIRAs` relation because Release Items do not directly relate to Company or Project. Project-scoped Dashboard feedback resolves the Project's Company relation and filters Feedback through `Company` because the live Feedback `Project` property is a rollup.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**
