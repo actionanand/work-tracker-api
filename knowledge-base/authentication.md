@@ -120,6 +120,243 @@ npx wrangler secret put AUTH_JWT_SECRET
 
 Login requests are rate limited by the `AUTH_RATE_LIMITER` Cloudflare Rate Limit binding.
 
+## Local CLI Verification
+
+Use the following commands to verify the complete authentication flow locally. Keep `npm run dev` running in one terminal and use a second terminal for the checks.
+
+### 1. Verify local secret configuration
+
+Confirm `.dev.vars` is ignored by Git:
+
+```bash
+git check-ignore -v .dev.vars
+```
+
+List only the variable names, not their values:
+
+```bash
+cut -d= -f1 .dev.vars
+```
+
+Expected secret names:
+
+```text
+NOTION_TOKEN
+AUTH_PASSWORD_HASH
+AUTH_PASSWORD_SALT
+AUTH_JWT_SECRET
+```
+
+`AUTH_PASSWORD_ITERATIONS` and `AUTH_TOKEN_TTL_SECONDS` are non-secret Wrangler configuration and should normally remain in `wrangler.jsonc`.
+
+### 2. Start the local Worker
+
+```bash
+npm run dev
+```
+
+Wrangler should show the secret bindings as `(hidden)` and the non-secret auth configuration values normally.
+
+### 3. Verify the public health endpoint
+
+```bash
+curl -sS -i http://localhost:8787/
+```
+
+Expected: HTTP 200.
+
+### 4. Verify protected routes reject anonymous access
+
+```bash
+curl -sS -i http://localhost:8787/api/dashboard
+```
+
+Expected: HTTP 401 with a generic `Unauthorized` response.
+
+### 5. Enter the login password safely
+
+Use the same password that was used to generate `AUTH_PASSWORD_HASH`. `read -s` prevents the password from being echoed or stored directly in shell history.
+
+```bash
+read -s -p "Login password: " AUTH_PASSWORD_INPUT
+echo
+```
+
+### 6. Login from the CLI
+
+```bash
+LOGIN_RESPONSE=$(curl -sS \
+  -X POST \
+  http://localhost:8787/api/auth/login \
+  -H 'Content-Type: application/json' \
+  --data "$(jq -n --arg password "$AUTH_PASSWORD_INPUT" '{password:$password}')")
+```
+
+Clear the plaintext password variable immediately:
+
+```bash
+unset AUTH_PASSWORD_INPUT
+```
+
+Inspect the login result without printing the JWT:
+
+```bash
+echo "$LOGIN_RESPONSE" | jq '{
+  tokenType,
+  expiresIn,
+  accessTokenReceived: (.accessToken != null),
+  error
+}'
+```
+
+Expected:
+
+```json
+{
+  "tokenType": "Bearer",
+  "expiresIn": 3600,
+  "accessTokenReceived": true,
+  "error": null
+}
+```
+
+### 7. Store the temporary access token
+
+```bash
+TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.accessToken // empty')
+```
+
+Verify only that a token was received:
+
+```bash
+[ -n "$TOKEN" ] && echo "Token received" || echo "Token missing"
+```
+
+Do not print or paste the token.
+
+### 8. Verify token status
+
+```bash
+curl -sS \
+  http://localhost:8787/api/auth/status \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq
+```
+
+Expected: `authenticated` is `true`, `subject` is `owner`, and `expiresAt` contains the expiry timestamp.
+
+### 9. Call a protected endpoint with the token
+
+```bash
+curl -sS \
+  http://localhost:8787/api/dashboard \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.generatedAt, .currentSprint.sprint, .jiraSummary'
+```
+
+A valid token should allow the request and return the normal Dashboard response.
+
+To verify project scoping as well:
+
+```bash
+curl -sS \
+  'http://localhost:8787/api/dashboard?projectId=<PROJECT_PAGE_ID>' \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.project, .currentSprint.sprint, .jiraSummary, .releaseSummary'
+```
+
+Replace `<PROJECT_PAGE_ID>` with a real Notion Project page ID.
+
+### 10. Verify invalid tokens are rejected
+
+```bash
+curl -sS -i \
+  http://localhost:8787/api/dashboard \
+  -H 'Authorization: Bearer invalid-token'
+```
+
+Expected: HTTP 401.
+
+### 11. Verify CORS preflight does not require authentication
+
+```bash
+curl -sS -i \
+  -X OPTIONS \
+  http://localhost:8787/api/dashboard \
+  -H 'Origin: http://localhost:4200' \
+  -H 'Access-Control-Request-Method: GET' \
+  -H 'Access-Control-Request-Headers: Authorization,Content-Type'
+```
+
+Expected: a successful preflight response such as HTTP 204, not an authentication 401.
+
+### 12. Optional: verify wrong-password handling
+
+Enter an incorrect password:
+
+```bash
+read -s -p "Wrong password test: " AUTH_PASSWORD_INPUT
+echo
+```
+
+Then call login:
+
+```bash
+curl -sS -i \
+  -X POST \
+  http://localhost:8787/api/auth/login \
+  -H 'Content-Type: application/json' \
+  --data "$(jq -n --arg password "$AUTH_PASSWORD_INPUT" '{password:$password}')"
+```
+
+Clear the variable:
+
+```bash
+unset AUTH_PASSWORD_INPUT
+```
+
+Expected: HTTP 401 with `Invalid credentials`.
+
+### 13. Optional: verify login rate limiting
+
+The login endpoint is rate limited. Repeated failed login attempts should eventually return HTTP 429. Run this only when intentionally testing the limiter because it can temporarily block further local login attempts.
+
+### 14. Verify secrets are not tracked by Git
+
+Confirm `.dev.vars` remains ignored:
+
+```bash
+git check-ignore -v .dev.vars
+```
+
+Search tracked files for credential assignments:
+
+```bash
+git grep -nE \
+  'AUTH_PASSWORD_HASH=|AUTH_PASSWORD_SALT=|AUTH_JWT_SECRET=|NOTION_TOKEN=' \
+  -- ':!.gitignore'
+```
+
+Documentation placeholders are acceptable. Real secret values must never appear in tracked files.
+
+Confirm the old plaintext-password binding is gone:
+
+```bash
+git grep -n 'AUTH_PASSWORD='
+```
+
+Expected: no runtime/configuration occurrence of the old plaintext password binding.
+
+### 15. Clean up shell variables
+
+```bash
+unset TOKEN
+unset LOGIN_RESPONSE
+unset AUTH_PASSWORD_INPUT
+```
+
+Never paste passwords, JWT access tokens, password hashes, salts, JWT signing secrets, or the Notion token into commits, issues, screenshots, shared logs, or documentation.
+
 ## Security Model
 
 The Worker stores:
