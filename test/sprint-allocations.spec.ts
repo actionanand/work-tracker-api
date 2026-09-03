@@ -3,11 +3,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleSprintAllocationRoutes } from "../src/features/sprint-allocations/sprint-allocation.routes";
 import worker from "../src/index";
 import type { Env } from "../src/shared/env";
+import {
+	createAuthHeaders,
+	createTestRateLimiter,
+	TEST_AUTH_JWT_SECRET,
+	TEST_AUTH_PASSWORD_HASH,
+	TEST_AUTH_PASSWORD_ITERATIONS,
+	TEST_AUTH_PASSWORD_SALT,
+	TEST_AUTH_TOKEN_TTL_SECONDS,
+} from "./helpers/auth";
 
 const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 
 const testEnv: Env = {
 	NOTION_TOKEN: "test-notion-token",
+	AUTH_PASSWORD_HASH: TEST_AUTH_PASSWORD_HASH,
+	AUTH_PASSWORD_SALT: TEST_AUTH_PASSWORD_SALT,
+	AUTH_PASSWORD_ITERATIONS: TEST_AUTH_PASSWORD_ITERATIONS,
+	AUTH_JWT_SECRET: TEST_AUTH_JWT_SECRET,
+	AUTH_TOKEN_TTL_SECONDS: TEST_AUTH_TOKEN_TTL_SECONDS,
+	AUTH_RATE_LIMITER: createTestRateLimiter(),
 	JIRAS_DATA_SOURCE_ID: "test-jiras-data-source-id",
 	SPRINTS_DATA_SOURCE_ID: "test-sprints-data-source-id",
 	SPRINT_ALLOCATIONS_DATA_SOURCE_ID: "test-sprint-allocations-data-source-id",
@@ -201,7 +216,9 @@ function stubNotionFetch() {
 }
 
 async function fetchWorker(path: string): Promise<Response> {
-	const request = new IncomingRequest(`http://example.com${path}`);
+	const request = new IncomingRequest(`http://example.com${path}`, {
+		headers: await createAuthHeaders(testEnv),
+	});
 	const ctx = createExecutionContext();
 
 	const response = await worker.fetch(request, testEnv, ctx);

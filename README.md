@@ -24,9 +24,10 @@ The Worker currently acts as:
 
 - API backend for the app
 - security boundary for the Notion token
+- authentication boundary for Work Tracker API routes
 - proxy between the client and Notion
 - response transformation layer from raw Notion JSON to app-friendly JSON
-- future location for filtering, validation, authentication, caching, aggregation, and write operations
+- future location for caching, aggregation, and write operations
 
 ## Source Structure
 
@@ -35,9 +36,20 @@ src/
 ├── index.ts
 ├── shared/
 │   ├── env.ts
+│   ├── auth/
+│   │   ├── auth.constants.ts
+│   │   ├── auth.crypto.ts
+│   │   ├── auth.errors.ts
+│   │   ├── auth.middleware.ts
+│   │   ├── auth.password.ts
+│   │   ├── auth.responses.ts
+│   │   ├── auth.token.ts
+│   │   └── auth.types.ts
 │   └── notion/
 │       └── notion-client.ts
 └── features/
+    ├── auth/
+    │   └── auth.routes.ts
     ├── jiras/
     │   ├── jira.mapper.ts
     │   ├── jira.filters.ts
@@ -100,7 +112,9 @@ Layer responsibilities:
 | --- | --- |
 | `src/index.ts` | Cloudflare Worker entry point, root health response, route delegation, fallback 404. |
 | `src/shared/env.ts` | Cloudflare binding interface for secrets and data source IDs. |
+| `src/shared/auth/*` | PBKDF2 password verifier checks, JWT-compatible token signing/verification, auth middleware, and auth responses. |
 | `src/shared/notion/notion-client.ts` | Shared Notion data-source query client, Notion API version, common error handling. |
+| `src/features/auth/auth.routes.ts` | Public login route and protected auth status route. |
 | `src/features/jiras/jira.routes.ts` | JIRA HTTP route selection and route-to-filter mapping. |
 | `src/features/jiras/jira.service.ts` | JIRA query orchestration through the shared Notion client and mapper. |
 | `src/features/jiras/jira.filters.ts` | Reusable Notion-side JIRA filter definitions. |
@@ -121,6 +135,8 @@ Layer responsibilities:
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/` | Health/root response. |
+| `POST` | `/api/auth/login` | Public login route. Returns a short-lived bearer access token. |
+| `GET` | `/api/auth/status` | Protected auth status route. |
 | `GET` | `/api/jiras` | All JIRAs from the configured Notion data source. |
 | `GET` | `/api/jiras/active` | JIRAs in the active sprint. |
 | `GET` | `/api/jiras/blocked` | Active sprint JIRAs with `Status = Blocked`. |
@@ -154,7 +170,7 @@ Layer responsibilities:
 | `GET` | `/api/work-links` | All Work Links from the configured Notion data source, sorted by Link ascending. |
 | `GET` | `/api/work-links/active` | Active Work Links. |
 
-Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
+All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
 `GET /api/dashboard` supports optional `companyId` and `projectId` query parameters. Release dashboard sections are scoped through matching JIRAs because Release Items do not have a direct Project relation. Project-scoped Dashboard feedback is scoped through the Project's Company relation because Feedback `Project` is a rollup in the live schema.
 
@@ -205,10 +221,25 @@ Install dependencies:
 npm install
 ```
 
+Generate a local password verifier:
+
+```bash
+node scripts/generate-auth-password.mjs
+```
+
+Generate an independent JWT signing secret:
+
+```bash
+openssl rand -hex 32
+```
+
 Create `.dev.vars` locally at the repository root. This file is intentionally gitignored.
 
 ```ini
 NOTION_TOKEN=your_notion_token_here
+AUTH_PASSWORD_HASH=generated_hash_here
+AUTH_PASSWORD_SALT=generated_salt_here
+AUTH_JWT_SECRET=value_from_openssl_rand_hex_32
 ```
 
 Do not commit `.dev.vars`.
@@ -226,9 +257,22 @@ Configure non-secret IDs in `wrangler.jsonc`:
   "WORK_LOGS_DATA_SOURCE_ID": "your-work-logs-data-source-id",
   "RELEASE_ITEMS_DATA_SOURCE_ID": "your-release-items-data-source-id",
   "FEEDBACK_DATA_SOURCE_ID": "your-feedback-data-source-id",
-  "WORK_LINKS_DATA_SOURCE_ID": "your-work-links-data-source-id"
+  "WORK_LINKS_DATA_SOURCE_ID": "your-work-links-data-source-id",
+  "AUTH_PASSWORD_ITERATIONS": "600000",
+  "AUTH_TOKEN_TTL_SECONDS": "3600"
 }
 ```
+
+Production auth secrets should be configured as Cloudflare Worker secrets:
+
+```bash
+npx wrangler secret put NOTION_TOKEN
+npx wrangler secret put AUTH_PASSWORD_HASH
+npx wrangler secret put AUTH_PASSWORD_SALT
+npx wrangler secret put AUTH_JWT_SECRET
+```
+
+Enter secret values interactively. Do not put secret values directly on command lines.
 
 ## Local Development
 
@@ -248,20 +292,23 @@ Example checks:
 
 ```bash
 curl -s http://localhost:8787/ | jq
-curl -s http://localhost:8787/api/jiras | jq
-curl -s http://localhost:8787/api/jiras/blocked | jq
-curl -s http://localhost:8787/api/jiras/CRI-1234 | jq
-curl -s http://localhost:8787/api/sprints/active | jq
-curl -s http://localhost:8787/api/sprint-allocations/current | jq
-curl -s http://localhost:8787/api/companies/active | jq
-curl -s http://localhost:8787/api/teams?companyId=company-page-id | jq
-curl -s http://localhost:8787/api/projects?companyId=company-page-id | jq
-curl -s http://localhost:8787/api/dashboard?projectId=project-page-id | jq
-curl -s http://localhost:8787/api/work-logs?from=2026-09-01\&to=2026-09-30 | jq
-curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage | jq
-curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 | jq
-curl -s http://localhost:8787/api/work-links/active?type=Documentation | jq
-curl -s http://localhost:8787/api/jiras/CRI-1234?include=relations | jq
+TOKEN=$(curl -s http://localhost:8787/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"password":"your_work_tracker_password_here"}' | jq -r .accessToken)
+curl -s http://localhost:8787/api/jiras -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/jiras/blocked -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/jiras/CRI-1234 -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/sprints/active -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/sprint-allocations/current -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/companies/active -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/teams?companyId=company-page-id -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/projects?companyId=company-page-id -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/dashboard?projectId=project-page-id -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/work-logs?from=2026-09-01\&to=2026-09-30 -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/work-links/active?type=Documentation -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/jiras/CRI-1234?include=relations -H "Authorization: Bearer $TOKEN" | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.
@@ -291,6 +338,7 @@ Project guides:
 Living technical references:
 
 - [Architecture](knowledge-base/architecture.md)
+- [Authentication](knowledge-base/authentication.md)
 - [JIRA API](knowledge-base/jira-api.md)
 - [Sprint API](knowledge-base/sprint-api.md)
 - [Company, Team, and Project API](knowledge-base/company-team-project-api.md)

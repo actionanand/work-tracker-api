@@ -1,4 +1,8 @@
 import { handleCompanyRoutes } from "./features/companies/company.routes";
+import {
+	handleProtectedAuthRoutes,
+	handlePublicAuthRoutes,
+} from "./features/auth/auth.routes";
 import { handleDashboardRoutes } from "./features/dashboard/dashboard.routes";
 import { handleFeedbackRoutes } from "./features/feedback/feedback.routes";
 import { handleProjectRoutes } from "./features/projects/project.routes";
@@ -9,6 +13,8 @@ import { handleTeamRoutes } from "./features/teams/team.routes";
 import { handleWorkLinkRoutes } from "./features/work-links/work-link.routes";
 import { handleWorkLogRoutes } from "./features/work-logs/work-log.routes";
 import { handleJiraRoutes } from "./features/jiras/jira.routes";
+import { authenticateRequest } from "./shared/auth/auth.middleware";
+import { corsPreflightResponse } from "./shared/auth/auth.responses";
 import type { Env } from "./shared/env";
 
 export default {
@@ -19,11 +25,42 @@ export default {
 	): Promise<Response> {
 		const url = new URL(request.url);
 
+		if (request.method === "OPTIONS") {
+			return corsPreflightResponse();
+		}
+
 		if (request.method === "GET" && url.pathname === "/") {
 			return Response.json({
 				name: "Work Tracker API",
 				status: "ok",
 			});
+		}
+
+		const publicAuthResponse = await handlePublicAuthRoutes(request, url, env);
+
+		if (publicAuthResponse) {
+			return publicAuthResponse;
+		}
+
+		const authenticated =
+			url.pathname.startsWith("/api/")
+				? await authenticateRequest(request, env)
+				: null;
+
+		if (authenticated instanceof Response) {
+			return authenticated;
+		}
+
+		if (authenticated) {
+			const authResponse = await handleProtectedAuthRoutes(
+				request,
+				url,
+				authenticated,
+			);
+
+			if (authResponse) {
+				return authResponse;
+			}
 		}
 
 		const jiraResponse = await handleJiraRoutes(request, url, env);

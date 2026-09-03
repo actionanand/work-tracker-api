@@ -38,8 +38,20 @@
 		"WORK_LOGS_DATA_SOURCE_ID": "3cc87ffa-ee01-80b7-bf73-000b346f321b",
 		"RELEASE_ITEMS_DATA_SOURCE_ID": "3cf87ffa-ee01-802b-a76c-000bd0e690f3",
 		"FEEDBACK_DATA_SOURCE_ID": "3cf87ffa-ee01-805e-ad5a-000b521af7e6",
-		"WORK_LINKS_DATA_SOURCE_ID": "3cd87ffa-ee01-802f-a644-000b6e7b671c"
-	}
+		"WORK_LINKS_DATA_SOURCE_ID": "3cd87ffa-ee01-802f-a644-000b6e7b671c",
+		"AUTH_PASSWORD_ITERATIONS": "600000",
+		"AUTH_TOKEN_TTL_SECONDS": "3600"
+	},
+	"ratelimits": [
+		{
+			"name": "AUTH_RATE_LIMITER",
+			"namespace_id": "2026090301",
+			"simple": {
+				"limit": 5,
+				"period": 60
+			}
+		}
+	]
 	/**
 	 * Static Assets
 	 * https://developers.cloudflare.com/workers/static-assets/binding/

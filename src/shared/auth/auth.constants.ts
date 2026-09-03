@@ -1,0 +1,14 @@
+export const AUTH_TOKEN_TYPE = "Bearer";
+export const AUTH_SUBJECT = "owner";
+export const AUTH_ISSUER = "work-tracker-api";
+export const AUTH_AUDIENCE = "work-tracker-app";
+export const AUTH_ALGORITHM = "HS256";
+export const AUTH_TOKEN_TTL_SECONDS_DEFAULT = 3600;
+export const AUTH_TOKEN_TTL_SECONDS_MIN = 300;
+export const AUTH_TOKEN_TTL_SECONDS_MAX = 86400;
+export const AUTH_MAX_PASSWORD_LENGTH = 256;
+export const AUTH_PASSWORD_ITERATIONS_DEFAULT = 600000;
+export const AUTH_PASSWORD_ITERATIONS_MIN = 100000;
+export const AUTH_PASSWORD_ITERATIONS_MAX = 2000000;
+export const AUTH_PASSWORD_SALT_BYTES = 32;
+export const AUTH_PASSWORD_HASH_BYTES = 32;
