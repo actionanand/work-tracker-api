@@ -2,6 +2,8 @@
 
 The Dashboard API provides the first aggregate read model for the Work Tracker app.
 
+Dashboard routes require `Authorization: Bearer <accessToken>`, like other protected `/api/*` routes.
+
 ## Endpoint
 
 | Method | Path | Description |

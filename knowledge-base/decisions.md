@@ -286,6 +286,24 @@ Company and Project scope are applied where the underlying Notion data source ha
 
 Accepted and implemented.
 
+## 22. Protect API Routes with Single-User Bearer Authentication
+
+**Decision**
+
+Protect `/api/*` routes with a short-lived HS256 JWT-compatible bearer token issued by `POST /api/auth/login`. Keep `GET /`, login, and `OPTIONS` preflights public.
+
+**Reason**
+
+The Worker is the backend security boundary for a personal Work Tracker app. Password login keeps shared Notion credentials and data-source access out of the distributed client, while a short-lived bearer token avoids sending the password on every request.
+
+**Scope Notes**
+
+The Worker stores a PBKDF2-SHA256 password verifier in `AUTH_PASSWORD_HASH` plus `AUTH_PASSWORD_SALT`; it does not store the original password. `AUTH_JWT_SECRET` is independent of password verification. Login is rate limited through Cloudflare's Rate Limit binding. No refresh tokens, sessions, KV/D1 storage, static API keys, or write APIs are included in this phase.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**

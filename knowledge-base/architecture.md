@@ -25,9 +25,20 @@ src/
 ├── index.ts
 ├── shared/
 │   ├── env.ts
+│   ├── auth/
+│   │   ├── auth.constants.ts
+│   │   ├── auth.crypto.ts
+│   │   ├── auth.errors.ts
+│   │   ├── auth.middleware.ts
+│   │   ├── auth.password.ts
+│   │   ├── auth.responses.ts
+│   │   ├── auth.token.ts
+│   │   └── auth.types.ts
 │   └── notion/
 │       └── notion-client.ts
 └── features/
+    ├── auth/
+    │   └── auth.routes.ts
     ├── jiras/
     │   ├── jira.mapper.ts
     │   ├── jira.filters.ts
@@ -111,6 +122,12 @@ src/features/work-links/
 ```ts
 export interface Env {
   NOTION_TOKEN: string;
+  AUTH_PASSWORD_HASH: string;
+  AUTH_PASSWORD_SALT: string;
+  AUTH_PASSWORD_ITERATIONS?: string;
+  AUTH_JWT_SECRET: string;
+  AUTH_TOKEN_TTL_SECONDS?: string;
+  AUTH_RATE_LIMITER: RateLimitBinding;
   JIRAS_DATA_SOURCE_ID: string;
   SPRINTS_DATA_SOURCE_ID: string;
   SPRINT_ALLOCATIONS_DATA_SOURCE_ID: string;
@@ -139,6 +156,13 @@ export interface Env {
 - paginated catalog loading for Companies, Teams, Projects, Sprints, and JIRAs
 - per-request in-memory maps
 - resolved relation object types
+
+`src/shared/auth/` centralizes API authentication:
+
+- PBKDF2-SHA256 password verifier derivation and constant-time comparison
+- HS256 JWT-compatible token creation and verification
+- generic protected-route unauthorized responses
+- public CORS preflight response headers
 
 ## Feature Module Pattern
 
@@ -171,6 +195,8 @@ Sprints, Sprint Allocations, Companies, Teams, Projects, Dashboard, Work Logs, R
 
 - parse the request URL
 - return the root health response
+- handle public auth routes and CORS preflights
+- authenticate protected `/api/*` routes before feature delegation
 - delegate feature routes
 - return the normal 404 response when no route matches
 
@@ -179,6 +205,7 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 ## Related Docs
 
 - [JIRA API](jira-api.md)
+- [Authentication](authentication.md)
 - [Sprint API](sprint-api.md)
 - [Company, Team, and Project API](company-team-project-api.md)
 - [Work Log API](work-log-api.md)
