@@ -4,11 +4,16 @@ import {
 	queryAllNotionDataSourcePages,
 	queryNotionDataSource,
 } from "../../shared/notion/notion-client";
+import {
+	enrichProjects,
+	type EnrichedProject,
+	type IncludeRelationsOption,
+} from "../../shared/relations/relation-enrichment";
 import { projectFilters } from "./project.filters";
 import { mapProject, type NotionProjectPage, type Project } from "./project.mapper";
 
-export interface ProjectListResponse {
-	data: Project[];
+export interface ProjectListResponse<TProject = Project> {
+	data: TProject[];
 	count: number;
 	hasMore: boolean;
 	nextCursor: string | null;
@@ -17,7 +22,8 @@ export interface ProjectListResponse {
 export async function listProjects(
 	env: Env,
 	filter?: NotionQueryFilter,
-): Promise<ProjectListResponse> {
+	options: IncludeRelationsOption = {},
+): Promise<ProjectListResponse<Project | EnrichedProject>> {
 	const notion = await queryNotionDataSource<NotionProjectPage>({
 		dataSourceId: env.PROJECTS_DATA_SOURCE_ID,
 		env,
@@ -25,10 +31,13 @@ export async function listProjects(
 	});
 
 	const data = notion.results.map(mapProject);
+	const responseData = options.includeRelations
+		? await enrichProjects(env, data)
+		: data;
 
 	return {
-		data,
-		count: data.length,
+		data: responseData,
+		count: responseData.length,
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};

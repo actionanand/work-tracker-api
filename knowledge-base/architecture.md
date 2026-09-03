@@ -128,6 +128,13 @@ export interface Env {
 - common HTTP error handling
 - response typing for query results, `has_more`, and `next_cursor`
 
+`src/shared/relations/` centralizes optional shallow relation enrichment:
+
+- include-parameter validation
+- paginated catalog loading for Companies, Teams, Projects, Sprints, and JIRAs
+- per-request in-memory maps
+- resolved relation object types
+
 ## Feature Module Pattern
 
 Future features should follow this pattern:
@@ -173,5 +180,6 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 - [Release API](release-api.md)
 - [Feedback API](feedback-api.md)
 - [Work Links API](work-links-api.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)

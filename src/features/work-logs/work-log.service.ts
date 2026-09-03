@@ -4,10 +4,15 @@ import type {
 	NotionQuerySort,
 } from "../../shared/notion/notion-client";
 import { queryNotionDataSource } from "../../shared/notion/notion-client";
+import {
+	enrichWorkLogs,
+	type EnrichedWorkLog,
+	type IncludeRelationsOption,
+} from "../../shared/relations/relation-enrichment";
 import { mapWorkLog, type NotionWorkLogPage, type WorkLog } from "./work-log.mapper";
 
-export interface WorkLogListResponse {
-	data: WorkLog[];
+export interface WorkLogListResponse<TWorkLog = WorkLog> {
+	data: TWorkLog[];
 	count: number;
 	hasMore: boolean;
 	nextCursor: string | null;
@@ -23,7 +28,8 @@ export const workLogDefaultSorts: NotionQuerySort[] = [
 export async function listWorkLogs(
 	env: Env,
 	filter?: NotionQueryFilter,
-): Promise<WorkLogListResponse> {
+	options: IncludeRelationsOption = {},
+): Promise<WorkLogListResponse<WorkLog | EnrichedWorkLog>> {
 	const notion = await queryNotionDataSource<NotionWorkLogPage>({
 		dataSourceId: env.WORK_LOGS_DATA_SOURCE_ID,
 		env,
@@ -32,10 +38,13 @@ export async function listWorkLogs(
 	});
 
 	const data = notion.results.map(mapWorkLog);
+	const responseData = options.includeRelations
+		? await enrichWorkLogs(env, data)
+		: data;
 
 	return {
-		data,
-		count: data.length,
+		data: responseData,
+		count: responseData.length,
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};

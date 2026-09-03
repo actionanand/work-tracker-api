@@ -93,7 +93,7 @@ Relation IDs currently remain raw Notion page IDs:
 - `blockedByIds`
 - `releaseItemIds`
 
-Relation-name resolution is intentionally deferred. Keeping raw IDs preserves relationship information while avoiding additional Notion calls until a feature needs resolved names.
+When `include=relations` is supplied, JIRA endpoints also include shallow `projects`, `sprints`, and `blockedBy` arrays. Raw relation ID arrays remain unchanged. `blockedBy` JIRAs are not recursively enriched.
 
 ## Historical JIRA Goal
 
@@ -126,5 +126,6 @@ Do not hardcode current sample test records as assumptions about production data
 ## Related Docs
 
 - [Architecture](architecture.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)
 - [Worker as API Proxy](../documentation/04-worker-as-api-proxy.md)

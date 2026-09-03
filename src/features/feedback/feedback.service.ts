@@ -5,13 +5,18 @@ import type {
 } from "../../shared/notion/notion-client";
 import { queryNotionDataSource } from "../../shared/notion/notion-client";
 import {
+	enrichFeedback,
+	type EnrichedFeedback,
+	type IncludeRelationsOption,
+} from "../../shared/relations/relation-enrichment";
+import {
 	mapFeedback,
 	type Feedback,
 	type NotionFeedbackPage,
 } from "./feedback.mapper";
 
-export interface FeedbackListResponse {
-	data: Feedback[];
+export interface FeedbackListResponse<TFeedback = Feedback> {
+	data: TFeedback[];
 	count: number;
 	hasMore: boolean;
 	nextCursor: string | null;
@@ -27,7 +32,8 @@ export const feedbackDateSorts: NotionQuerySort[] = [
 export async function listFeedback(
 	env: Env,
 	filter?: NotionQueryFilter,
-): Promise<FeedbackListResponse> {
+	options: IncludeRelationsOption = {},
+): Promise<FeedbackListResponse<Feedback | EnrichedFeedback>> {
 	const notion = await queryNotionDataSource<NotionFeedbackPage>({
 		dataSourceId: env.FEEDBACK_DATA_SOURCE_ID,
 		env,
@@ -36,10 +42,13 @@ export async function listFeedback(
 	});
 
 	const data = notion.results.map(mapFeedback);
+	const responseData = options.includeRelations
+		? await enrichFeedback(env, data)
+		: data;
 
 	return {
-		data,
-		count: data.length,
+		data: responseData,
+		count: responseData.length,
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};

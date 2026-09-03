@@ -254,6 +254,20 @@ Work Links point to external resources that support day-to-day work. The Worker 
 
 Accepted and implemented.
 
+## 20. Make Relation Enrichment Explicit and Shallow
+
+**Decision**
+
+Support relation-name enrichment only through the opt-in `include=relations` query parameter.
+
+**Reason**
+
+Default API responses must remain backward compatible and keep raw Notion relation IDs. Opt-in shallow enrichment gives clients display-ready names, keys, and summaries while avoiding recursive response graphs and per-ID Notion lookups.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**

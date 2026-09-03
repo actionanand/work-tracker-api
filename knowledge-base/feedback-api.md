@@ -80,15 +80,15 @@ Title, rich text, and select values are trimmed. Missing text defaults to an emp
 
 Feedback may originate from managers, leads, colleagues, clients, or others and may be linked to Company, Project, and Team records.
 
+When `include=relations` is supplied, Feedback endpoints also include shallow `companies`, `projects`, and `teams` arrays. Raw relation ID arrays remain unchanged.
+
 ## Not Implemented
 
 The following are not implemented in this feature:
 
 - Feedback create/update/delete APIs
 - `/api/feedback/:id`
-- Work Links API
 - Dashboard API
-- relation-name enrichment
 - caching
 - Android authentication
 - Notion write APIs
@@ -99,4 +99,5 @@ The following are not implemented in this feature:
 - [Company, Team, and Project API](company-team-project-api.md)
 - [JIRA API](jira-api.md)
 - [Release API](release-api.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)

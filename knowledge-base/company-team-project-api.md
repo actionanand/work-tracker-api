@@ -11,7 +11,7 @@ Company
         └── Sprint
 ```
 
-Projects belong to Company and Team independently through Notion relations. API responses currently expose relation IDs only; nested relation-name resolution is not implemented.
+Projects belong to Company and Team independently through Notion relations. API responses expose relation IDs by default.
 
 ## Companies
 
@@ -93,6 +93,8 @@ companyIds
 teamIds
 ```
 
+When `include=relations` is supplied, Project endpoints also include shallow `companies` and `teams` arrays. Raw `companyIds` and `teamIds` remain unchanged.
+
 ## Sprint History by Company
 
 Sprint history supports:
@@ -133,7 +135,6 @@ Collection endpoints return:
 
 The following are not implemented in this feature set:
 
-- nested relation-name resolution
 - create/update/delete APIs
 - Company lookup by name
 - Project lookup by name
@@ -143,5 +144,6 @@ The following are not implemented in this feature set:
 ## Related Docs
 
 - [Architecture](architecture.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Sprint API](sprint-api.md)
 - [Notion Integration](notion-integration.md)

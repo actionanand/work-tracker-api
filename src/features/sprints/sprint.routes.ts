@@ -4,6 +4,7 @@ import type {
 	NotionQueryFilter,
 	NotionQuerySort,
 } from "../../shared/notion/notion-client";
+import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { listProjectIdsByCompany } from "../projects/project.service";
 import { combineSprintFilters, sprintFilters } from "./sprint.filters";
 import { listSprints } from "./sprint.service";
@@ -143,6 +144,12 @@ export async function handleSprintRoutes(
 		return null;
 	}
 
+	const includeRelations = parseIncludeRelations(url);
+
+	if (includeRelations instanceof Response) {
+		return includeRelations;
+	}
+
 	const filter = await buildQueryFilter(url, config, env);
 
 	if (filter instanceof Response) {
@@ -150,7 +157,9 @@ export async function handleSprintRoutes(
 	}
 
 	try {
-		return Response.json(await listSprints(env, filter, config.sorts));
+		return Response.json(
+			await listSprints(env, filter, config.sorts, { includeRelations }),
+		);
 	} catch (error) {
 		console.error(error);
 

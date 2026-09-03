@@ -1,5 +1,6 @@
 import type { Env } from "../../shared/env";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { jiraFilters } from "./jira.filters";
 import {
 	DuplicateJiraKeyError,
@@ -28,10 +29,16 @@ export async function handleJiraRoutes(
 	}
 
 	if (jiraRouteFilters.has(url.pathname)) {
+		const includeRelations = parseIncludeRelations(url);
+
+		if (includeRelations instanceof Response) {
+			return includeRelations;
+		}
+
 		const filter = jiraRouteFilters.get(url.pathname);
 
 		try {
-			return Response.json(await listJiras(env, filter));
+			return Response.json(await listJiras(env, filter, { includeRelations }));
 		} catch (error) {
 			console.error(error);
 
@@ -52,8 +59,14 @@ export async function handleJiraRoutes(
 		return null;
 	}
 
+	const includeRelations = parseIncludeRelations(url);
+
+	if (includeRelations instanceof Response) {
+		return includeRelations;
+	}
+
 	try {
-		return Response.json(await getJiraByKey(env, jiraKey));
+		return Response.json(await getJiraByKey(env, jiraKey, { includeRelations }));
 	} catch (error) {
 		if (error instanceof JiraNotFoundError) {
 			return Response.json(

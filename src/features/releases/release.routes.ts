@@ -4,6 +4,7 @@ import type {
 	NotionQueryFilter,
 	NotionQuerySort,
 } from "../../shared/notion/notion-client";
+import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { combineReleaseFilters, releaseFilters } from "./release.filters";
 import {
 	listReleaseItems,
@@ -134,6 +135,12 @@ export async function handleReleaseRoutes(
 		return null;
 	}
 
+	const includeRelations = parseIncludeRelations(url);
+
+	if (includeRelations instanceof Response) {
+		return includeRelations;
+	}
+
 	const filter = buildQueryFilter(url, config);
 
 	if (filter instanceof Response) {
@@ -141,7 +148,9 @@ export async function handleReleaseRoutes(
 	}
 
 	try {
-		return Response.json(await listReleaseItems(env, filter, config.sorts));
+		return Response.json(
+			await listReleaseItems(env, filter, config.sorts, { includeRelations }),
+		);
 	} catch (error) {
 		console.error(error);
 

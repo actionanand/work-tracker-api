@@ -5,13 +5,18 @@ import type {
 } from "../../shared/notion/notion-client";
 import { queryNotionDataSource } from "../../shared/notion/notion-client";
 import {
+	enrichReleaseItems,
+	type EnrichedReleaseItem,
+	type IncludeRelationsOption,
+} from "../../shared/relations/relation-enrichment";
+import {
 	mapReleaseItem,
 	type NotionReleasePage,
 	type ReleaseItem,
 } from "./release.mapper";
 
-export interface ReleaseItemListResponse {
-	data: ReleaseItem[];
+export interface ReleaseItemListResponse<TReleaseItem = ReleaseItem> {
+	data: TReleaseItem[];
 	count: number;
 	hasMore: boolean;
 	nextCursor: string | null;
@@ -35,7 +40,8 @@ export async function listReleaseItems(
 	env: Env,
 	filter?: NotionQueryFilter,
 	sorts: NotionQuerySort[] = releaseAnnouncedDateSorts,
-): Promise<ReleaseItemListResponse> {
+	options: IncludeRelationsOption = {},
+): Promise<ReleaseItemListResponse<ReleaseItem | EnrichedReleaseItem>> {
 	const notion = await queryNotionDataSource<NotionReleasePage>({
 		dataSourceId: env.RELEASE_ITEMS_DATA_SOURCE_ID,
 		env,
@@ -44,10 +50,13 @@ export async function listReleaseItems(
 	});
 
 	const data = notion.results.map(mapReleaseItem);
+	const responseData = options.includeRelations
+		? await enrichReleaseItems(env, data)
+		: data;
 
 	return {
-		data,
-		count: data.length,
+		data: responseData,
+		count: responseData.length,
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};

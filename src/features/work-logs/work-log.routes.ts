@@ -1,6 +1,7 @@
 import type { Env } from "../../shared/env";
 import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { combineWorkLogFilters, workLogFilters } from "./work-log.filters";
 import { listWorkLogs } from "./work-log.service";
 
@@ -123,6 +124,12 @@ export async function handleWorkLogRoutes(
 		return null;
 	}
 
+	const includeRelations = parseIncludeRelations(url);
+
+	if (includeRelations instanceof Response) {
+		return includeRelations;
+	}
+
 	const filter = buildQueryFilter(url, config);
 
 	if (filter instanceof Response) {
@@ -130,7 +137,7 @@ export async function handleWorkLogRoutes(
 	}
 
 	try {
-		return Response.json(await listWorkLogs(env, filter));
+		return Response.json(await listWorkLogs(env, filter, { includeRelations }));
 	} catch (error) {
 		console.error(error);
 

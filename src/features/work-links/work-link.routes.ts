@@ -1,6 +1,7 @@
 import type { Env } from "../../shared/env";
 import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { combineWorkLinkFilters, workLinkFilters } from "./work-link.filters";
 import { listWorkLinks } from "./work-link.service";
 
@@ -63,6 +64,12 @@ export async function handleWorkLinkRoutes(
 		return null;
 	}
 
+	const includeRelations = parseIncludeRelations(url);
+
+	if (includeRelations instanceof Response) {
+		return includeRelations;
+	}
+
 	const filter = buildQueryFilter(url, config);
 
 	if (filter instanceof Response) {
@@ -70,7 +77,7 @@ export async function handleWorkLinkRoutes(
 	}
 
 	try {
-		return Response.json(await listWorkLinks(env, filter));
+		return Response.json(await listWorkLinks(env, filter, { includeRelations }));
 	} catch (error) {
 		console.error(error);
 

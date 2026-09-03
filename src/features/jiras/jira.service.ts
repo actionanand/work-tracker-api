@@ -1,11 +1,17 @@
 import type { Env } from "../../shared/env";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
 import { queryNotionDataSource } from "../../shared/notion/notion-client";
+import {
+	enrichJira,
+	enrichJiras,
+	type EnrichedJira,
+	type IncludeRelationsOption,
+} from "../../shared/relations/relation-enrichment";
 import { jiraFilters } from "./jira.filters";
 import { mapJira, type Jira, type NotionJiraPage } from "./jira.mapper";
 
-export interface JiraListResponse {
-	data: Jira[];
+export interface JiraListResponse<TJira = Jira> {
+	data: TJira[];
 	count: number;
 	hasMore: boolean;
 	nextCursor: string | null;
@@ -28,7 +34,8 @@ export class DuplicateJiraKeyError extends Error {
 export async function listJiras(
 	env: Env,
 	filter?: NotionQueryFilter,
-): Promise<JiraListResponse> {
+	options: IncludeRelationsOption = {},
+): Promise<JiraListResponse<Jira | EnrichedJira>> {
 	const notion = await queryNotionDataSource<NotionJiraPage>({
 		dataSourceId: env.JIRAS_DATA_SOURCE_ID,
 		env,
@@ -36,16 +43,21 @@ export async function listJiras(
 	});
 
 	const data = notion.results.map(mapJira);
+	const responseData = options.includeRelations ? await enrichJiras(env, data) : data;
 
 	return {
-		data,
-		count: data.length,
+		data: responseData,
+		count: responseData.length,
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};
 }
 
-export async function getJiraByKey(env: Env, jiraKey: string): Promise<Jira> {
+export async function getJiraByKey(
+	env: Env,
+	jiraKey: string,
+	options: IncludeRelationsOption = {},
+): Promise<Jira | EnrichedJira> {
 	const result = await listJiras(env, jiraFilters.byKey(jiraKey));
 
 	if (result.data.length === 0) {
@@ -56,5 +68,7 @@ export async function getJiraByKey(env: Env, jiraKey: string): Promise<Jira> {
 		throw new DuplicateJiraKeyError(jiraKey, result.data.length);
 	}
 
-	return result.data[0];
+	return options.includeRelations
+		? enrichJira(env, result.data[0])
+		: result.data[0];
 }

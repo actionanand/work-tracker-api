@@ -85,6 +85,8 @@ allocationIds
 
 Formula and rollup numbers default to `0` when Notion values are missing or null. Date/select values default to `null`. Relation values are returned as raw Notion page IDs.
 
+When `include=relations` is supplied, Sprint endpoints also include shallow `projects` arrays. Raw `projectIds` remain unchanged.
+
 ## Sprint Allocation Endpoints
 
 | Method | Path | Behavior |
@@ -168,6 +170,7 @@ Current tests cover:
 ## Related Docs
 
 - [Architecture](architecture.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)
 - [Company, Team, and Project API](company-team-project-api.md)

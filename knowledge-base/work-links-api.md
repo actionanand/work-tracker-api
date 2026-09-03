@@ -62,7 +62,9 @@ projectIds
 
 Title, rich text, and select values are trimmed. Missing text defaults to an empty string. Missing select and URL values default to `null`. Missing checkbox values default to `false`. Missing relations default to empty arrays.
 
-Work Links are reference or bookmark entries optionally associated with Company and Project records. Company and Project are returned as Notion relation IDs; related names are not enriched yet. External URLs are treated only as stored data and are not fetched by the Worker.
+Work Links are reference or bookmark entries optionally associated with Company and Project records. Company and Project are returned as Notion relation IDs by default. External URLs are treated only as stored data and are not fetched by the Worker.
+
+When `include=relations` is supplied, Work Link endpoints also include shallow `companies` and `projects` arrays. Raw relation ID arrays remain unchanged.
 
 ## Not Implemented
 
@@ -71,7 +73,6 @@ The following are not implemented in this feature:
 - Work Link create/update/delete APIs
 - `/api/work-links/:id`
 - nested Company/Project objects
-- relation-name enrichment
 - Dashboard API
 - caching
 - Android authentication
@@ -82,4 +83,5 @@ The following are not implemented in this feature:
 - [Architecture](architecture.md)
 - [Company, Team, and Project API](company-team-project-api.md)
 - [Feedback API](feedback-api.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)

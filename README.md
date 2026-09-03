@@ -150,6 +150,8 @@ Layer responsibilities:
 
 Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
+Selected endpoints support optional shallow relation enrichment with `include=relations`. Existing raw relation ID fields remain unchanged, and default responses are unchanged when `include` is absent.
+
 Root response:
 
 ```json
@@ -250,6 +252,7 @@ curl -s http://localhost:8787/api/work-logs?from=2026-09-01\&to=2026-09-30 | jq
 curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage | jq
 curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 | jq
 curl -s http://localhost:8787/api/work-links/active?type=Documentation | jq
+curl -s http://localhost:8787/api/jiras/CRI-1234?include=relations | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.
@@ -286,5 +289,6 @@ Living technical references:
 - [Release API](knowledge-base/release-api.md)
 - [Feedback API](knowledge-base/feedback-api.md)
 - [Work Links API](knowledge-base/work-links-api.md)
+- [Relation Enrichment](knowledge-base/relation-enrichment.md)
 - [Notion Integration](knowledge-base/notion-integration.md)
 - [Decisions](knowledge-base/decisions.md)

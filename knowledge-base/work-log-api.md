@@ -71,6 +71,8 @@ spilloverCount
 
 Title, rich text, and select values are trimmed. Missing text defaults to an empty string. Missing select/date values default to `null`. Missing relation and rollup collections default to empty arrays. Missing rollup numbers default to `0`.
 
+When `include=relations` is supplied, Work Log endpoints also include shallow `companies`, `teams`, `projects`, `jiras`, and `sprints` arrays. Raw relation ID arrays remain unchanged.
+
 ## Work Log History
 
 A Work Log may exist without a JIRA. One JIRA may have multiple Work Logs across different dates.
@@ -83,7 +85,6 @@ The following are not implemented in this feature:
 
 - Work Log create/update/delete APIs
 - `/api/work-logs/:id`
-- nested Project/Company/Team resolution
 - caching
 - Android authentication
 
@@ -92,4 +93,5 @@ The following are not implemented in this feature:
 - [Architecture](architecture.md)
 - [JIRA API](jira-api.md)
 - [Sprint API](sprint-api.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)

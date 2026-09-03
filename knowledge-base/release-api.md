@@ -78,6 +78,8 @@ Title, rich text, and select values are trimmed. `versionNumber` is intentionall
 
 Missing text defaults to an empty string. Missing select/date values default to `null`. Missing relation and rollup collections default to empty arrays. Missing numeric rollups default to `0`.
 
+When `include=relations` is supplied, Release endpoints also include shallow `jiras` and `sprints` arrays. Raw relation ID arrays remain unchanged.
+
 ## Release History
 
 One JIRA can have multiple Release Items because a ticket can release multiple components or micro-frontends.
@@ -90,10 +92,7 @@ The following are not implemented in this feature:
 
 - Release Item create/update/delete APIs
 - `/api/releases/:id`
-- Feedback API
-- Work Links API
 - Dashboard API
-- relation-name enrichment
 - caching
 - Android authentication
 
@@ -103,4 +102,5 @@ The following are not implemented in this feature:
 - [JIRA API](jira-api.md)
 - [Sprint API](sprint-api.md)
 - [Work Log API](work-log-api.md)
+- [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)

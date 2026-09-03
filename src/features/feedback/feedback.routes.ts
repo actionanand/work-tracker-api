@@ -1,6 +1,7 @@
 import type { Env } from "../../shared/env";
 import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { combineFeedbackFilters, feedbackFilters } from "./feedback.filters";
 import { listFeedback } from "./feedback.service";
 
@@ -134,6 +135,12 @@ export async function handleFeedbackRoutes(
 		return null;
 	}
 
+	const includeRelations = parseIncludeRelations(url);
+
+	if (includeRelations instanceof Response) {
+		return includeRelations;
+	}
+
 	const filter = buildQueryFilter(url, config);
 
 	if (filter instanceof Response) {
@@ -141,7 +148,7 @@ export async function handleFeedbackRoutes(
 	}
 
 	try {
-		return Response.json(await listFeedback(env, filter));
+		return Response.json(await listFeedback(env, filter, { includeRelations }));
 	} catch (error) {
 		console.error(error);
 
