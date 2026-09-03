@@ -68,11 +68,16 @@ src/
     │   ├── release.filters.ts
     │   ├── release.service.ts
     │   └── release.routes.ts
-    └── feedback/
-        ├── feedback.mapper.ts
-        ├── feedback.filters.ts
-        ├── feedback.service.ts
-        └── feedback.routes.ts
+    ├── feedback/
+    │   ├── feedback.mapper.ts
+    │   ├── feedback.filters.ts
+    │   ├── feedback.service.ts
+    │   └── feedback.routes.ts
+    └── work-links/
+        ├── work-link.mapper.ts
+        ├── work-link.filters.ts
+        ├── work-link.service.ts
+        └── work-link.routes.ts
 ```
 
 ## Feature-Based Organization
@@ -91,6 +96,7 @@ src/features/projects/
 src/features/work-logs/
 src/features/releases/
 src/features/feedback/
+src/features/work-links/
 ```
 
 ## Shared Code
@@ -109,6 +115,7 @@ export interface Env {
   WORK_LOGS_DATA_SOURCE_ID: string;
   RELEASE_ITEMS_DATA_SOURCE_ID: string;
   FEEDBACK_DATA_SOURCE_ID: string;
+  WORK_LINKS_DATA_SOURCE_ID: string;
 }
 ```
 
@@ -142,11 +149,9 @@ The pattern means:
 | `*.filters.ts` | External API filter definitions. |
 | `*.mapper.ts` | Raw external data to API model mapping. |
 
-Potential future modules include:
+Potential future modules include Dashboard APIs and write APIs.
 
-- `work-links/`
-
-Sprints, Sprint Allocations, Companies, Teams, Projects, Work Logs, Release Items, and Feedback are implemented. The other modules listed above are not implemented yet.
+Sprints, Sprint Allocations, Companies, Teams, Projects, Work Logs, Release Items, Feedback, and Work Links are implemented. Dashboard APIs and write APIs are not implemented yet.
 
 ## Thin Entry Point
 
@@ -167,5 +172,6 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 - [Work Log API](work-log-api.md)
 - [Release API](release-api.md)
 - [Feedback API](feedback-api.md)
+- [Work Links API](work-links-api.md)
 - [Notion Integration](notion-integration.md)
 - [Decisions](decisions.md)

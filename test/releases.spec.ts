@@ -17,6 +17,7 @@ const testEnv: Env = {
 	WORK_LOGS_DATA_SOURCE_ID: "test-work-logs-data-source-id",
 	RELEASE_ITEMS_DATA_SOURCE_ID: "test-release-items-data-source-id",
 	FEEDBACK_DATA_SOURCE_ID: "test-feedback-data-source-id",
+	WORK_LINKS_DATA_SOURCE_ID: "test-work-links-data-source-id",
 };
 
 const jiraId = "55555555-5555-5555-5555-555555555555";

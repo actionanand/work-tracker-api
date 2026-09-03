@@ -240,6 +240,20 @@ Feedback can come from managers, leads, colleagues, clients, or others and may b
 
 Accepted and implemented.
 
+## 19. Treat Work Links as Read-Only Reference Data
+
+**Decision**
+
+Implement Work Links as a read-only API for reference and bookmark entries, with optional Company and Project relation filters.
+
+**Reason**
+
+Work Links point to external resources that support day-to-day work. The Worker should expose the stored URL values without fetching or validating those external URLs, and should keep related Company and Project records as relation IDs until relation-name enrichment is designed separately.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**

@@ -5,6 +5,7 @@ import { handleReleaseRoutes } from "./features/releases/release.routes";
 import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
 import { handleSprintRoutes } from "./features/sprints/sprint.routes";
 import { handleTeamRoutes } from "./features/teams/team.routes";
+import { handleWorkLinkRoutes } from "./features/work-links/work-link.routes";
 import { handleWorkLogRoutes } from "./features/work-logs/work-log.routes";
 import { handleJiraRoutes } from "./features/jiras/jira.routes";
 import type { Env } from "./shared/env";
@@ -80,6 +81,12 @@ export default {
 
 		if (feedbackResponse) {
 			return feedbackResponse;
+		}
+
+		const workLinkResponse = await handleWorkLinkRoutes(request, url, env);
+
+		if (workLinkResponse) {
+			return workLinkResponse;
 		}
 
 		return Response.json(
