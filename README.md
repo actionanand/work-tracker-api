@@ -245,6 +245,12 @@ Generate a local password verifier:
 node scripts/generate-auth-password.mjs
 ```
 
+The Worker verifies passwords with PBKDF2-HMAC-SHA256 at 100000 iterations,
+which matches the current Cloudflare Workers Web Crypto compatibility ceiling.
+If `AUTH_PASSWORD_ITERATIONS` changes, regenerate both `AUTH_PASSWORD_HASH` and
+`AUTH_PASSWORD_SALT`; an existing verifier cannot be reused with a different
+iteration count.
+
 Generate an independent JWT signing secret:
 
 ```bash
@@ -276,7 +282,7 @@ Configure non-secret IDs in `wrangler.jsonc`:
   "RELEASE_ITEMS_DATA_SOURCE_ID": "your-release-items-data-source-id",
   "FEEDBACK_DATA_SOURCE_ID": "your-feedback-data-source-id",
   "WORK_LINKS_DATA_SOURCE_ID": "your-work-links-data-source-id",
-  "AUTH_PASSWORD_ITERATIONS": "600000",
+  "AUTH_PASSWORD_ITERATIONS": "100000",
   "AUTH_TOKEN_TTL_SECONDS": "3600"
 }
 ```
