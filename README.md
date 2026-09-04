@@ -29,6 +29,24 @@ The Worker currently acts as:
 - response transformation layer from raw Notion JSON to app-friendly JSON
 - future location for caching, aggregation, and write operations
 
+## Production
+
+Production Worker URL:
+
+```text
+https://work-tracker-api.techie-ar.workers.dev/
+```
+
+API base URL for production clients:
+
+```text
+https://work-tracker-api.techie-ar.workers.dev
+```
+
+The root health endpoint is public. Protected `/api/*` routes require a valid bearer access token, except `POST /api/auth/login` and CORS `OPTIONS` preflight requests.
+
+Production deployments are connected to the `main-cloudflare` branch, so changes merged only to `master` do not update the production Worker until they are promoted to `main-cloudflare`.
+
 ## Source Structure
 
 ```text
@@ -334,6 +352,7 @@ Project guides:
 - [Local Development](documentation/05-local-development.md)
 - [Deployment](documentation/06-deployment.md)
 - [Security](documentation/07-security.md)
+- [Database Setup](documentation/database-setup/README.md)
 
 Living technical references:
 
