@@ -115,7 +115,29 @@ The generator prompts for the password interactively and does not print the orig
 
 `AUTH_JWT_SECRET` must be independent of password verification. `AUTH_TOKEN_TTL_SECONDS` is non-secret Wrangler configuration and defaults to 3600 seconds when absent. Accepted TTL values are 300 through 86400 seconds.
 
-`AUTH_PASSWORD_ITERATIONS` is non-secret Wrangler configuration. It defaults to 600000 and may be tuned between 100000 and 2000000 after benchmarking in the actual Cloudflare Worker environment.
+`AUTH_PASSWORD_ITERATIONS` is non-secret Wrangler configuration. The Worker uses PBKDF2-HMAC-SHA256 with 100000 iterations for Cloudflare Workers Web Crypto compatibility. This is lower than general higher-work-factor PBKDF2 recommendations, so login is also protected by the Cloudflare `AUTH_RATE_LIMITER` binding.
+
+A verifier generated with one iteration count cannot be reused with another. Changing `AUTH_PASSWORD_ITERATIONS` requires regenerating both `AUTH_PASSWORD_HASH` and `AUTH_PASSWORD_SALT` from the chosen login password:
+
+```bash
+node scripts/generate-auth-password.mjs
+```
+
+Then update local `.dev.vars`:
+
+```ini
+AUTH_PASSWORD_HASH=generated_hash_here
+AUTH_PASSWORD_SALT=generated_salt_here
+```
+
+And update production secrets:
+
+```bash
+npx wrangler secret put AUTH_PASSWORD_HASH
+npx wrangler secret put AUTH_PASSWORD_SALT
+```
+
+`AUTH_JWT_SECRET` does not need to be regenerated when changing the password verifier. `NOTION_TOKEN` is unrelated and does not need to be regenerated.
 
 Production secrets should be configured with Wrangler secrets:
 
@@ -470,5 +492,7 @@ password
 ```
 
 The stored verifier uses a 256-bit PBKDF2-SHA256 output encoded as Base64URL. The salt is 32 random bytes encoded as Base64URL and is generated once when creating the verifier, not during each login attempt.
+
+The Worker currently derives the verifier with 100000 PBKDF2-HMAC-SHA256 iterations to remain compatible with Cloudflare Workers native Web Crypto. Because the iteration count is part of the verifier calculation, regenerate `AUTH_PASSWORD_HASH` and `AUTH_PASSWORD_SALT` whenever that value changes.
 
 `AUTH_JWT_SECRET` signs access tokens. Do not reuse the password, password hash, or Notion token as the JWT signing secret.

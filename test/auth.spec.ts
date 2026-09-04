@@ -379,7 +379,8 @@ describe("Authentication API", () => {
 		["malformed password salt", { AUTH_PASSWORD_SALT: "not valid!" }],
 		["missing JWT secret", { AUTH_JWT_SECRET: "" }],
 		["too-low password iterations", { AUTH_PASSWORD_ITERATIONS: "99999" }],
-		["too-high password iterations", { AUTH_PASSWORD_ITERATIONS: "2000001" }],
+		["unsupported password iterations", { AUTH_PASSWORD_ITERATIONS: "600000" }],
+		["too-high password iterations", { AUTH_PASSWORD_ITERATIONS: "100001" }],
 		["non-numeric password iterations", { AUTH_PASSWORD_ITERATIONS: "nope" }],
 		["too-short TTL", { AUTH_TOKEN_TTL_SECONDS: "60" }],
 		["too-long TTL", { AUTH_TOKEN_TTL_SECONDS: "86401" }],
@@ -392,6 +393,25 @@ describe("Authentication API", () => {
 		);
 
 		await expectAuthServiceUnavailableResponse(response);
+	});
+
+	it("rejects 600000 password iterations before PBKDF2 derivation", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const deriveBits = vi.spyOn(crypto.subtle, "deriveBits");
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+			createTestEnv({ AUTH_PASSWORD_ITERATIONS: "600000" }),
+		);
+
+		await expectAuthServiceUnavailableResponse(response);
+		expect(deriveBits).not.toHaveBeenCalled();
+		expect(consoleError).toHaveBeenCalledWith(
+			"AUTH_LOGIN_INTERNAL_ERROR:AUTH_CONFIG_ITERATIONS_INVALID",
+		);
+
+		deriveBits.mockRestore();
 	});
 
 	it("returns a safe 500 when PBKDF2 derivation fails", async () => {
@@ -408,6 +428,26 @@ describe("Authentication API", () => {
 		await expectAuthServiceUnavailableResponse(response);
 		expect(consoleError).toHaveBeenCalledWith(
 			"AUTH_LOGIN_INTERNAL_ERROR:AUTH_PASSWORD_VERIFY_ERROR",
+		);
+		deriveBits.mockRestore();
+	});
+
+	it("logs a safe diagnostic for unsupported PBKDF2 runtime failures", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const error = new Error("unsupported");
+		error.name = "NotSupportedError";
+		const deriveBits = vi
+			.spyOn(crypto.subtle, "deriveBits")
+			.mockRejectedValueOnce(error);
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+		);
+
+		await expectAuthServiceUnavailableResponse(response);
+		expect(consoleError).toHaveBeenCalledWith(
+			"AUTH_LOGIN_INTERNAL_ERROR:AUTH_PASSWORD_VERIFY_UNSUPPORTED_ITERATIONS",
 		);
 		deriveBits.mockRestore();
 	});
@@ -682,18 +722,18 @@ describe("Authentication crypto helpers", () => {
 			getAuthPasswordIterations(
 				createTestEnv({ AUTH_PASSWORD_ITERATIONS: undefined }),
 			),
-		).toBe(600000);
+		).toBe(100000);
 		expect(
 			getAuthPasswordIterations(createTestEnv({ AUTH_PASSWORD_ITERATIONS: "100000" })),
 		).toBe(100000);
-		expect(
-			getAuthPasswordIterations(createTestEnv({ AUTH_PASSWORD_ITERATIONS: "2000000" })),
-		).toBe(2000000);
 		expect(() =>
 			getAuthPasswordIterations(createTestEnv({ AUTH_PASSWORD_ITERATIONS: "99999" })),
 		).toThrow();
 		expect(() =>
-			getAuthPasswordIterations(createTestEnv({ AUTH_PASSWORD_ITERATIONS: "2000001" })),
+			getAuthPasswordIterations(createTestEnv({ AUTH_PASSWORD_ITERATIONS: "100001" })),
+		).toThrow();
+		expect(() =>
+			getAuthPasswordIterations(createTestEnv({ AUTH_PASSWORD_ITERATIONS: "600000" })),
 		).toThrow();
 	});
 
@@ -744,6 +784,19 @@ describe("Authentication crypto helpers", () => {
 		expect(verifier).not.toHaveProperty("password");
 		expect(base64UrlDecode(verifier.hash)).toHaveLength(32);
 		expect(base64UrlDecode(verifier.salt)).toHaveLength(32);
+	});
+
+	it("creates verifier values compatible with Worker password verification", async () => {
+		const verifier = await createPasswordVerifier(TEST_LOGIN_PASSWORD);
+		const env = createTestEnv({
+			AUTH_PASSWORD_HASH: verifier.hash,
+			AUTH_PASSWORD_SALT: verifier.salt,
+			AUTH_PASSWORD_ITERATIONS: String(verifier.iterations),
+		});
+
+		expect(verifier.iterations).toBe(100000);
+		expect(await verifyPassword(TEST_LOGIN_PASSWORD, env)).toBe(true);
+		expect(await verifyPassword("wrong-password", env)).toBe(false);
 	});
 
 	it("creates and verifies JWT-compatible access tokens", async () => {

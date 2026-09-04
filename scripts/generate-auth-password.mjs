@@ -2,9 +2,9 @@
 import { emitKeypressEvents } from "node:readline";
 import { stdin, stdout, stderr, exit, env, argv } from "node:process";
 
-const DEFAULT_ITERATIONS = 600000;
+const DEFAULT_ITERATIONS = 100000;
 const MIN_ITERATIONS = 100000;
-const MAX_ITERATIONS = 2000000;
+const MAX_ITERATIONS = 100000;
 const SALT_BYTES = 32;
 const HASH_BYTES = 32;
 const textEncoder = new TextEncoder();
@@ -114,9 +114,7 @@ try {
 	stdout.write("Copy these values into .dev.vars or Cloudflare Worker secrets:\n");
 	stdout.write(`AUTH_PASSWORD_HASH=${base64UrlEncode(hash)}\n`);
 	stdout.write(`AUTH_PASSWORD_SALT=${base64UrlEncode(salt)}\n`);
-	stdout.write(
-		`AUTH_PASSWORD_ITERATIONS=${iterations} # non-secret; this project keeps it in wrangler.jsonc\n`,
-	);
+	stdout.write(`Password iterations: ${iterations}\n`);
 } catch (error) {
 	stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
 	exit(1);

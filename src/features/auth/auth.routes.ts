@@ -10,6 +10,7 @@ import {
 } from "../../shared/auth/auth.responses";
 import {
 	AuthConfigurationError,
+	classifyPasswordVerificationError,
 	logAuthDiagnostic,
 } from "../../shared/auth/auth.errors";
 import { verifyPassword } from "../../shared/auth/auth.password";
@@ -101,7 +102,7 @@ export async function handlePublicAuthRoutes(
 				throw error;
 			}
 
-			logAuthDiagnostic("AUTH_PASSWORD_VERIFY_ERROR");
+			logAuthDiagnostic(classifyPasswordVerificationError(error));
 
 			return authConfigurationErrorResponse();
 		}
