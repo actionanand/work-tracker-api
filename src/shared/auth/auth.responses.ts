@@ -1,3 +1,23 @@
+const CORS_HEADERS = {
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+	"Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
+
+export function withCorsHeaders(response: Response): Response {
+	const headers = new Headers(response.headers);
+
+	for (const [name, value] of Object.entries(CORS_HEADERS)) {
+		headers.set(name, value);
+	}
+
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	});
+}
+
 export function unauthorizedResponse(): Response {
 	return Response.json(
 		{
@@ -44,7 +64,7 @@ export function badLoginRequestResponse(): Response {
 export function authConfigurationErrorResponse(): Response {
 	return Response.json(
 		{
-			error: "Authentication is not configured",
+			error: "Authentication service unavailable",
 		},
 		{
 			status: 500,
@@ -74,10 +94,22 @@ export function corsPreflightResponse(): Response {
 	return new Response(null, {
 		status: 204,
 		headers: {
-			"Access-Control-Allow-Origin": "*",
-			"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-			"Access-Control-Allow-Headers": "Authorization, Content-Type",
+			...CORS_HEADERS,
 			"Access-Control-Max-Age": "86400",
 		},
 	});
+}
+
+export function internalServerErrorResponse(): Response {
+	return Response.json(
+		{
+			error: "Internal server error",
+		},
+		{
+			status: 500,
+			headers: {
+				"Cache-Control": "no-store",
+			},
+		},
+	);
 }

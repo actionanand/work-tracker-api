@@ -63,6 +63,14 @@ Too many login attempts return HTTP 429:
 }
 ```
 
+Authentication service errors return HTTP 500:
+
+```json
+{
+  "error": "Authentication service unavailable"
+}
+```
+
 ## Token Status
 
 ```http
@@ -356,6 +364,91 @@ unset AUTH_PASSWORD_INPUT
 ```
 
 Never paste passwords, JWT access tokens, password hashes, salts, JWT signing secrets, or the Notion token into commits, issues, screenshots, shared logs, or documentation.
+
+## Production Login Verification
+
+Production Worker URL:
+
+```text
+https://work-tracker-api.techie-ar.workers.dev
+```
+
+List configured Worker secret names without printing values:
+
+```bash
+npx wrangler secret list
+```
+
+Expected secret names:
+
+```text
+NOTION_TOKEN
+AUTH_PASSWORD_HASH
+AUTH_PASSWORD_SALT
+AUTH_JWT_SECRET
+```
+
+Tail production logs in a separate terminal:
+
+```bash
+npx wrangler tail
+```
+
+Safe production login check:
+
+```bash
+read -s -p "Login password: " AUTH_PASSWORD_INPUT
+echo
+
+LOGIN_RESPONSE=$(curl -sS -i \
+  -X POST \
+  https://work-tracker-api.techie-ar.workers.dev/api/auth/login \
+  -H 'Content-Type: application/json' \
+  --data "$(jq -n --arg password "$AUTH_PASSWORD_INPUT" '{password:$password}')")
+
+unset AUTH_PASSWORD_INPUT
+
+printf '%s\n' "$LOGIN_RESPONSE" | awk 'BEGIN { body = 0 } /^$/ { body = 1; next } body == 0 { print }'
+printf '%s\n' "$LOGIN_RESPONSE" | awk 'BEGIN { body = 0 } /^$/ { body = 1; next } body == 1 { print }' \
+  | jq '{
+      tokenType,
+      expiresIn,
+      accessTokenReceived: (.accessToken != null),
+      error
+    }'
+```
+
+This prints response headers and a redacted/summarized body. It does not print the successful JWT access token.
+
+Useful production log codes for login diagnostics:
+
+```text
+AUTH_LOGIN_REQUEST_RECEIVED
+AUTH_RATE_LIMIT_OK
+AUTH_CONFIG_VALID
+AUTH_PASSWORD_VERIFY_START
+AUTH_PASSWORD_VERIFY_FAILED
+AUTH_PASSWORD_VERIFY_SUCCESS
+AUTH_TOKEN_SIGN_START
+AUTH_TOKEN_SIGN_SUCCESS
+AUTH_LOGIN_INTERNAL_ERROR:<safe-code>
+```
+
+Safe internal error codes include:
+
+```text
+AUTH_CONFIG_HASH_MISSING
+AUTH_CONFIG_HASH_INVALID
+AUTH_CONFIG_SALT_MISSING
+AUTH_CONFIG_SALT_INVALID
+AUTH_CONFIG_JWT_SECRET_MISSING
+AUTH_CONFIG_ITERATIONS_INVALID
+AUTH_CONFIG_TTL_INVALID
+AUTH_RATE_LIMIT_ERROR
+AUTH_PASSWORD_VERIFY_ERROR
+AUTH_TOKEN_SIGN_ERROR
+AUTH_UNEXPECTED_ERROR
+```
 
 ## Security Model
 

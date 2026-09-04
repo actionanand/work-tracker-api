@@ -8,7 +8,10 @@ import {
 	invalidCredentialsResponse,
 	tooManyLoginAttemptsResponse,
 } from "../../shared/auth/auth.responses";
-import { AuthConfigurationError } from "../../shared/auth/auth.errors";
+import {
+	AuthConfigurationError,
+	logAuthDiagnostic,
+} from "../../shared/auth/auth.errors";
 import { verifyPassword } from "../../shared/auth/auth.password";
 import {
 	createAccessToken,
@@ -60,28 +63,73 @@ export async function handlePublicAuthRoutes(
 		return null;
 	}
 
-	const password = await parseLoginBody(request);
-
-	if (password instanceof Response) {
-		return password;
-	}
-
 	try {
-		validateAuthConfiguration(env);
+		console.log("AUTH_LOGIN_REQUEST_RECEIVED");
 
-		const rateLimitResponse = await rateLimitLogin(request, env);
+		let rateLimitResponse: Response | null;
+
+		try {
+			rateLimitResponse = await rateLimitLogin(request, env);
+		} catch {
+			logAuthDiagnostic("AUTH_RATE_LIMIT_ERROR");
+
+			return authConfigurationErrorResponse();
+		}
 
 		if (rateLimitResponse) {
 			return rateLimitResponse;
 		}
 
-		const credentialsValid = await verifyPassword(password, env);
+		console.log("AUTH_RATE_LIMIT_OK");
+
+		const password = await parseLoginBody(request);
+
+		if (password instanceof Response) {
+			return password;
+		}
+
+		validateAuthConfiguration(env);
+		console.log("AUTH_CONFIG_VALID");
+		console.log("AUTH_PASSWORD_VERIFY_START");
+
+		let credentialsValid: boolean;
+
+		try {
+			credentialsValid = await verifyPassword(password, env);
+		} catch (error) {
+			if (error instanceof AuthConfigurationError) {
+				throw error;
+			}
+
+			logAuthDiagnostic("AUTH_PASSWORD_VERIFY_ERROR");
+
+			return authConfigurationErrorResponse();
+		}
 
 		if (!credentialsValid) {
+			console.log("AUTH_PASSWORD_VERIFY_FAILED");
+
 			return invalidCredentialsResponse();
 		}
 
-		const token = await createAccessToken(env);
+		console.log("AUTH_PASSWORD_VERIFY_SUCCESS");
+		console.log("AUTH_TOKEN_SIGN_START");
+
+		let token: Awaited<ReturnType<typeof createAccessToken>>;
+
+		try {
+			token = await createAccessToken(env);
+		} catch (error) {
+			if (error instanceof AuthConfigurationError) {
+				throw error;
+			}
+
+			logAuthDiagnostic("AUTH_TOKEN_SIGN_ERROR");
+
+			return authConfigurationErrorResponse();
+		}
+
+		console.log("AUTH_TOKEN_SIGN_SUCCESS");
 
 		return Response.json(
 			{
@@ -97,10 +145,12 @@ export async function handlePublicAuthRoutes(
 		);
 	} catch (error) {
 		if (error instanceof AuthConfigurationError) {
+			logAuthDiagnostic(error.code);
+
 			return authConfigurationErrorResponse();
 		}
 
-		console.error("auth.login.failed");
+		logAuthDiagnostic("AUTH_UNEXPECTED_ERROR");
 
 		return authConfigurationErrorResponse();
 	}

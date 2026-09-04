@@ -145,6 +145,28 @@ function stubEmptyNotionFetch() {
 	return fetchMock;
 }
 
+function expectCorsHeaders(response: Response): void {
+	expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+	expect(response.headers.get("Access-Control-Allow-Methods")).toBe(
+		"GET, POST, OPTIONS",
+	);
+	expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+		"Authorization",
+	);
+	expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+		"Content-Type",
+	);
+}
+
+function expectAuthServiceUnavailableResponse(response: Response): Promise<unknown> {
+	expect(response.status).toBe(500);
+	expectCorsHeaders(response);
+
+	return expect(response.json()).resolves.toEqual({
+		error: "Authentication service unavailable",
+	});
+}
+
 describe("Authentication API", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -155,6 +177,7 @@ describe("Authentication API", () => {
 		const response = await fetchWorker("/");
 
 		expect(response.status).toBe(200);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			name: "Work Tracker API",
 			status: "ok",
@@ -167,6 +190,7 @@ describe("Authentication API", () => {
 		});
 
 		expect(response.status).toBe(204);
+		expectCorsHeaders(response);
 		expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
 			"Authorization",
 		);
@@ -191,6 +215,7 @@ describe("Authentication API", () => {
 		};
 
 		expect(response.status).toBe(200);
+		expectCorsHeaders(response);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 		expect(body.tokenType).toBe(AUTH_TOKEN_TYPE);
 		expect(body.expiresIn).toBe(3600);
@@ -202,6 +227,29 @@ describe("Authentication API", () => {
 			}),
 		);
 		expect(limit).toHaveBeenCalledWith({ key: "local-development" });
+	});
+
+	it("keeps POST /api/auth/login public before bearer auth middleware", async () => {
+		const fetchMock = stubEmptyNotionFetch();
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+		);
+
+		expect(response.status).toBe(200);
+		expectCorsHeaders(response);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("does not use GET /api/auth/login as the public login route", async () => {
+		const response = await fetchWorker("/api/auth/login");
+
+		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
+		expect(await response.json()).toEqual({
+			error: "Unauthorized",
+		});
 	});
 
 	it("uses CF-Connecting-IP as the login rate limit key", async () => {
@@ -250,10 +298,11 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(400);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			error: "Invalid login request",
 		});
-		expect(limit).not.toHaveBeenCalled();
+		expect(limit).toHaveBeenCalledWith({ key: "local-development" });
 	});
 
 	it("returns 400 for malformed JSON", async () => {
@@ -270,10 +319,11 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(400);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			error: "Invalid login request",
 		});
-		expect(limit).not.toHaveBeenCalled();
+		expect(limit).toHaveBeenCalledWith({ key: "local-development" });
 	});
 
 	it("returns 429 when the login rate limiter denies the request", async () => {
@@ -286,10 +336,27 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(429);
+		expectCorsHeaders(response);
 		expect(response.headers.get("Retry-After")).toBe("60");
 		expect(await response.json()).toEqual({
 			error: "Too many login attempts",
 		});
+	});
+
+	it("returns a safe 500 when the login rate limiter throws", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const limit = vi.fn().mockRejectedValue(new Error("rate limiter failed"));
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+			createTestEnv({ AUTH_RATE_LIMITER: { limit } }),
+		);
+
+		await expectAuthServiceUnavailableResponse(response);
+		expect(consoleError).toHaveBeenCalledWith(
+			"AUTH_LOGIN_INTERNAL_ERROR:AUTH_RATE_LIMIT_ERROR",
+		);
 	});
 
 	it("returns 401 for an incorrect password", async () => {
@@ -299,6 +366,7 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			error: "Invalid credentials",
 		});
@@ -323,10 +391,43 @@ describe("Authentication API", () => {
 			createTestEnv(overrides),
 		);
 
-		expect(response.status).toBe(500);
-		expect(await response.json()).toEqual({
-			error: "Authentication is not configured",
-		});
+		await expectAuthServiceUnavailableResponse(response);
+	});
+
+	it("returns a safe 500 when PBKDF2 derivation fails", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const deriveBits = vi
+			.spyOn(crypto.subtle, "deriveBits")
+			.mockRejectedValueOnce(new Error("derive failed"));
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+		);
+
+		await expectAuthServiceUnavailableResponse(response);
+		expect(consoleError).toHaveBeenCalledWith(
+			"AUTH_LOGIN_INTERNAL_ERROR:AUTH_PASSWORD_VERIFY_ERROR",
+		);
+		deriveBits.mockRestore();
+	});
+
+	it("returns a safe 500 when JWT signing fails", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const sign = vi
+			.spyOn(crypto.subtle, "sign")
+			.mockRejectedValueOnce(new Error("sign failed"));
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+		);
+
+		await expectAuthServiceUnavailableResponse(response);
+		expect(consoleError).toHaveBeenCalledWith(
+			"AUTH_LOGIN_INTERNAL_ERROR:AUTH_TOKEN_SIGN_ERROR",
+		);
+		sign.mockRestore();
 	});
 
 	it("returns auth status for a valid token", async () => {
@@ -341,6 +442,7 @@ describe("Authentication API", () => {
 		const body = (await response.json()) as Record<string, unknown>;
 
 		expect(response.status).toBe(200);
+		expectCorsHeaders(response);
 		expect(body.authenticated).toBe(true);
 		expect(body.subject).toBe(AUTH_SUBJECT);
 		expect(body.expiresAt).toEqual(expect.any(String));
@@ -355,6 +457,7 @@ describe("Authentication API", () => {
 		const response = await fetchWorker("/api/auth/status", { headers });
 
 		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
 		expect(response.headers.get("WWW-Authenticate")).toBe("Bearer");
 		expect(await response.json()).toEqual({
 			error: "Unauthorized",
@@ -374,6 +477,7 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			error: "Unauthorized",
 		});
@@ -409,6 +513,7 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			error: "Unauthorized",
 		});
@@ -420,6 +525,7 @@ describe("Authentication API", () => {
 		const response = await fetchWorker("/api/jiras");
 
 		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -436,6 +542,7 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			error: "Unauthorized",
 		});
@@ -454,6 +561,7 @@ describe("Authentication API", () => {
 		);
 
 		expect(response.status).toBe(200);
+		expectCorsHeaders(response);
 		expect(fetchMock).toHaveBeenCalledWith(
 			"https://api.notion.com/v1/data_sources/test-jiras-data-source-id/query",
 			expect.any(Object),
@@ -466,10 +574,31 @@ describe("Authentication API", () => {
 		});
 	});
 
+	it("adds CORS headers to feature-level 500 responses", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const env = createTestEnv();
+		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("notion failed")));
+
+		const response = await fetchWorker(
+			"/api/jiras",
+			{
+				headers: await createAuthHeaders(env),
+			},
+			env,
+		);
+
+		expect(response.status).toBe(500);
+		expectCorsHeaders(response);
+		expect(await response.json()).toEqual({
+			error: "Failed to retrieve JIRAs",
+		});
+	});
+
 	it("keeps unknown non-API paths on the common 404", async () => {
 		const response = await fetchWorker("/missing");
 
 		expect(response.status).toBe(404);
+		expectCorsHeaders(response);
 		expect(await response.json()).toEqual({
 			error: "Not found",
 		});
@@ -487,7 +616,9 @@ describe("Authentication API", () => {
 		);
 
 		expect(unauthenticated.status).toBe(401);
+		expectCorsHeaders(unauthenticated);
 		expect(authenticated.status).toBe(404);
+		expectCorsHeaders(authenticated);
 		expect(await authenticated.json()).toEqual({
 			error: "Not found",
 		});

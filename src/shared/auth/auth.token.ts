@@ -33,7 +33,7 @@ export function getAuthTokenTtlSeconds(env: Env): number {
 		value < AUTH_TOKEN_TTL_SECONDS_MIN ||
 		value > AUTH_TOKEN_TTL_SECONDS_MAX
 	) {
-		throw new AuthConfigurationError();
+		throw new AuthConfigurationError("AUTH_CONFIG_TTL_INVALID");
 	}
 
 	return value;
@@ -41,7 +41,7 @@ export function getAuthTokenTtlSeconds(env: Env): number {
 
 export function validateAuthConfiguration(env: Env): void {
 	if (!isNonEmptySecret(env.AUTH_JWT_SECRET)) {
-		throw new AuthConfigurationError();
+		throw new AuthConfigurationError("AUTH_CONFIG_JWT_SECRET_MISSING");
 	}
 
 	validatePasswordConfiguration(env);

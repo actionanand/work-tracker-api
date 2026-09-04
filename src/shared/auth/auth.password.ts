@@ -28,17 +28,21 @@ export function getAuthPasswordIterations(env: Env): number {
 		value < AUTH_PASSWORD_ITERATIONS_MIN ||
 		value > AUTH_PASSWORD_ITERATIONS_MAX
 	) {
-		throw new AuthConfigurationError();
+		throw new AuthConfigurationError("AUTH_CONFIG_ITERATIONS_INVALID");
 	}
 
 	return value;
 }
 
-function decodeStoredBytes(value: string, expectedLength: number): Uint8Array {
+function decodeStoredBytes(
+	value: string,
+	expectedLength: number,
+	code: "AUTH_CONFIG_HASH_INVALID" | "AUTH_CONFIG_SALT_INVALID",
+): Uint8Array {
 	const decoded = base64UrlDecode(value.trim());
 
 	if (!decoded || decoded.length !== expectedLength) {
-		throw new AuthConfigurationError();
+		throw new AuthConfigurationError(code);
 	}
 
 	return decoded;
@@ -49,12 +53,24 @@ export function validatePasswordConfiguration(env: Env): void {
 		!isNonEmptySecret(env.AUTH_PASSWORD_HASH) ||
 		!isNonEmptySecret(env.AUTH_PASSWORD_SALT)
 	) {
-		throw new AuthConfigurationError();
+		throw new AuthConfigurationError(
+			!isNonEmptySecret(env.AUTH_PASSWORD_HASH)
+				? "AUTH_CONFIG_HASH_MISSING"
+				: "AUTH_CONFIG_SALT_MISSING",
+		);
 	}
 
 	getAuthPasswordIterations(env);
-	decodeStoredBytes(env.AUTH_PASSWORD_HASH, AUTH_PASSWORD_HASH_BYTES);
-	decodeStoredBytes(env.AUTH_PASSWORD_SALT, AUTH_PASSWORD_SALT_BYTES);
+	decodeStoredBytes(
+		env.AUTH_PASSWORD_HASH,
+		AUTH_PASSWORD_HASH_BYTES,
+		"AUTH_CONFIG_HASH_INVALID",
+	);
+	decodeStoredBytes(
+		env.AUTH_PASSWORD_SALT,
+		AUTH_PASSWORD_SALT_BYTES,
+		"AUTH_CONFIG_SALT_INVALID",
+	);
 }
 
 export async function derivePasswordHash(
@@ -88,10 +104,15 @@ export async function verifyPassword(
 	env: Env,
 ): Promise<boolean> {
 	const iterations = getAuthPasswordIterations(env);
-	const salt = decodeStoredBytes(env.AUTH_PASSWORD_SALT, AUTH_PASSWORD_SALT_BYTES);
+	const salt = decodeStoredBytes(
+		env.AUTH_PASSWORD_SALT,
+		AUTH_PASSWORD_SALT_BYTES,
+		"AUTH_CONFIG_SALT_INVALID",
+	);
 	const expectedHash = decodeStoredBytes(
 		env.AUTH_PASSWORD_HASH,
 		AUTH_PASSWORD_HASH_BYTES,
+		"AUTH_CONFIG_HASH_INVALID",
 	);
 	const suppliedHash = await derivePasswordHash(password, salt, iterations);
 

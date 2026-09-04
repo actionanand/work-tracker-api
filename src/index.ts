@@ -14,8 +14,133 @@ import { handleWorkLinkRoutes } from "./features/work-links/work-link.routes";
 import { handleWorkLogRoutes } from "./features/work-logs/work-log.routes";
 import { handleJiraRoutes } from "./features/jiras/jira.routes";
 import { authenticateRequest } from "./shared/auth/auth.middleware";
-import { corsPreflightResponse } from "./shared/auth/auth.responses";
+import {
+	corsPreflightResponse,
+	internalServerErrorResponse,
+	withCorsHeaders,
+} from "./shared/auth/auth.responses";
 import type { Env } from "./shared/env";
+
+async function routeRequest(request: Request, env: Env): Promise<Response> {
+	const url = new URL(request.url);
+
+	if (request.method === "OPTIONS") {
+		return corsPreflightResponse();
+	}
+
+	if (request.method === "GET" && url.pathname === "/") {
+		return Response.json({
+			name: "Work Tracker API",
+			status: "ok",
+		});
+	}
+
+	const publicAuthResponse = await handlePublicAuthRoutes(request, url, env);
+
+	if (publicAuthResponse) {
+		return publicAuthResponse;
+	}
+
+	const authenticated =
+		url.pathname.startsWith("/api/")
+			? await authenticateRequest(request, env)
+			: null;
+
+	if (authenticated instanceof Response) {
+		return authenticated;
+	}
+
+	if (authenticated) {
+		const authResponse = await handleProtectedAuthRoutes(
+			request,
+			url,
+			authenticated,
+		);
+
+		if (authResponse) {
+			return authResponse;
+		}
+	}
+
+	const jiraResponse = await handleJiraRoutes(request, url, env);
+
+	if (jiraResponse) {
+		return jiraResponse;
+	}
+
+	const dashboardResponse = await handleDashboardRoutes(request, url, env);
+
+	if (dashboardResponse) {
+		return dashboardResponse;
+	}
+
+	const sprintResponse = await handleSprintRoutes(request, url, env);
+
+	if (sprintResponse) {
+		return sprintResponse;
+	}
+
+	const sprintAllocationResponse = await handleSprintAllocationRoutes(
+		request,
+		url,
+		env,
+	);
+
+	if (sprintAllocationResponse) {
+		return sprintAllocationResponse;
+	}
+
+	const companyResponse = await handleCompanyRoutes(request, url, env);
+
+	if (companyResponse) {
+		return companyResponse;
+	}
+
+	const teamResponse = await handleTeamRoutes(request, url, env);
+
+	if (teamResponse) {
+		return teamResponse;
+	}
+
+	const projectResponse = await handleProjectRoutes(request, url, env);
+
+	if (projectResponse) {
+		return projectResponse;
+	}
+
+	const workLogResponse = await handleWorkLogRoutes(request, url, env);
+
+	if (workLogResponse) {
+		return workLogResponse;
+	}
+
+	const releaseResponse = await handleReleaseRoutes(request, url, env);
+
+	if (releaseResponse) {
+		return releaseResponse;
+	}
+
+	const feedbackResponse = await handleFeedbackRoutes(request, url, env);
+
+	if (feedbackResponse) {
+		return feedbackResponse;
+	}
+
+	const workLinkResponse = await handleWorkLinkRoutes(request, url, env);
+
+	if (workLinkResponse) {
+		return workLinkResponse;
+	}
+
+	return Response.json(
+		{
+			error: "Not found",
+		},
+		{
+			status: 404,
+		},
+	);
+}
 
 export default {
 	async fetch(
@@ -23,123 +148,12 @@ export default {
 		env: Env,
 		_ctx?: ExecutionContext,
 	): Promise<Response> {
-		const url = new URL(request.url);
+		try {
+			return withCorsHeaders(await routeRequest(request, env));
+		} catch {
+			console.error("WORKER_INTERNAL_ERROR");
 
-		if (request.method === "OPTIONS") {
-			return corsPreflightResponse();
+			return withCorsHeaders(internalServerErrorResponse());
 		}
-
-		if (request.method === "GET" && url.pathname === "/") {
-			return Response.json({
-				name: "Work Tracker API",
-				status: "ok",
-			});
-		}
-
-		const publicAuthResponse = await handlePublicAuthRoutes(request, url, env);
-
-		if (publicAuthResponse) {
-			return publicAuthResponse;
-		}
-
-		const authenticated =
-			url.pathname.startsWith("/api/")
-				? await authenticateRequest(request, env)
-				: null;
-
-		if (authenticated instanceof Response) {
-			return authenticated;
-		}
-
-		if (authenticated) {
-			const authResponse = await handleProtectedAuthRoutes(
-				request,
-				url,
-				authenticated,
-			);
-
-			if (authResponse) {
-				return authResponse;
-			}
-		}
-
-		const jiraResponse = await handleJiraRoutes(request, url, env);
-
-		if (jiraResponse) {
-			return jiraResponse;
-		}
-
-		const dashboardResponse = await handleDashboardRoutes(request, url, env);
-
-		if (dashboardResponse) {
-			return dashboardResponse;
-		}
-
-		const sprintResponse = await handleSprintRoutes(request, url, env);
-
-		if (sprintResponse) {
-			return sprintResponse;
-		}
-
-		const sprintAllocationResponse = await handleSprintAllocationRoutes(
-			request,
-			url,
-			env,
-		);
-
-		if (sprintAllocationResponse) {
-			return sprintAllocationResponse;
-		}
-
-		const companyResponse = await handleCompanyRoutes(request, url, env);
-
-		if (companyResponse) {
-			return companyResponse;
-		}
-
-		const teamResponse = await handleTeamRoutes(request, url, env);
-
-		if (teamResponse) {
-			return teamResponse;
-		}
-
-		const projectResponse = await handleProjectRoutes(request, url, env);
-
-		if (projectResponse) {
-			return projectResponse;
-		}
-
-		const workLogResponse = await handleWorkLogRoutes(request, url, env);
-
-		if (workLogResponse) {
-			return workLogResponse;
-		}
-
-		const releaseResponse = await handleReleaseRoutes(request, url, env);
-
-		if (releaseResponse) {
-			return releaseResponse;
-		}
-
-		const feedbackResponse = await handleFeedbackRoutes(request, url, env);
-
-		if (feedbackResponse) {
-			return feedbackResponse;
-		}
-
-		const workLinkResponse = await handleWorkLinkRoutes(request, url, env);
-
-		if (workLinkResponse) {
-			return workLinkResponse;
-		}
-
-		return Response.json(
-			{
-				error: "Not found",
-			},
-			{
-				status: 404,
-			},
-		);
 	},
 };
