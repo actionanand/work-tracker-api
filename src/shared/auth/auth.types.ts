@@ -10,12 +10,16 @@ export interface AuthTokenPayload {
 	iat: number;
 	exp: number;
 	jti: string;
+	sessionStartedAt?: number;
 }
 
 export interface AuthStatus {
 	authenticated: true;
 	subject: "owner";
 	expiresAt: string;
+	renewAfter: string;
+	sessionStartedAt: string;
+	sessionExpiresAt: string;
 }
 
 export interface LoginRequestBody {

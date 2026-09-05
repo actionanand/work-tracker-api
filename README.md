@@ -157,6 +157,7 @@ Layer responsibilities:
 | --- | --- | --- |
 | `GET` | `/` | Health/root response. |
 | `POST` | `/api/auth/login` | Public login route. Returns a short-lived bearer access token. |
+| `POST` | `/api/auth/renew` | Protected sliding-session renewal route. Returns a new access token only inside the renewal window. |
 | `GET` | `/api/auth/status` | Protected auth status route. |
 | `GET` | `/api/jiras` | All JIRAs from the configured Notion data source. |
 | `GET` | `/api/jiras/active` | JIRAs in the active sprint. |
@@ -192,6 +193,8 @@ Layer responsibilities:
 | `GET` | `/api/work-links/active` | Active Work Links. |
 
 All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
+
+Auth access tokens last 1 hour. While a token is still valid, clients may call `POST /api/auth/renew` during the final 15 minutes to receive a replacement token. Sessions have an absolute 8-hour lifetime from the original password login, so renewal eventually returns HTTP 401 with `Reauthentication required` and the password must be entered again. Renewal is stateless, uses the current bearer token, does not use refresh tokens, and does not call Notion.
 
 `GET /api/dashboard` supports optional `companyId` and `projectId` query parameters. Release dashboard sections are scoped through matching JIRAs because Release Items do not have a direct Project relation. Project-scoped Dashboard feedback is scoped through the Project's Company relation because Feedback `Project` is a rollup in the live schema.
 
@@ -312,7 +315,9 @@ Configure non-secret IDs in `wrangler.jsonc`:
   "FEEDBACK_DATA_SOURCE_ID": "your-feedback-data-source-id",
   "WORK_LINKS_DATA_SOURCE_ID": "your-work-links-data-source-id",
   "AUTH_PASSWORD_ITERATIONS": "100000",
-  "AUTH_TOKEN_TTL_SECONDS": "3600"
+  "AUTH_TOKEN_TTL_SECONDS": "3600",
+  "AUTH_RENEW_WINDOW_SECONDS": "900",
+  "AUTH_MAX_SESSION_SECONDS": "28800"
 }
 ```
 
@@ -349,6 +354,7 @@ TOKEN=$(curl -s http://localhost:8787/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"password":"your_work_tracker_password_here"}' | jq -r .accessToken)
 curl -s http://localhost:8787/api/jiras -H "Authorization: Bearer $TOKEN" | jq
+curl -s -X POST http://localhost:8787/api/auth/renew -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/jiras/blocked -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/jiras/CRI-1234 -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/sprints/active -H "Authorization: Bearer $TOKEN" | jq

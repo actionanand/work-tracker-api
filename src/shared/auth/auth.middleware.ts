@@ -10,6 +10,7 @@ export interface AuthenticatedRequest {
 export async function authenticateRequest(
 	request: Request,
 	env: Env,
+	options: { enforceSessionLifetime?: boolean } = {},
 ): Promise<AuthenticatedRequest | Response> {
 	const authorization = request.headers.get("Authorization");
 
@@ -26,7 +27,7 @@ export async function authenticateRequest(
 	let payload: AuthTokenPayload | null;
 
 	try {
-		payload = await verifyAccessToken(env, token);
+		payload = await verifyAccessToken(env, token, undefined, options);
 	} catch {
 		return unauthorizedResponse();
 	}

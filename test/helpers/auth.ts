@@ -10,6 +10,8 @@ export const TEST_AUTH_PASSWORD_ITERATIONS = "100000";
 export const TEST_AUTH_JWT_SECRET =
 	"test-auth-jwt-secret-with-at-least-256-bits-of-fake-test-entropy";
 export const TEST_AUTH_TOKEN_TTL_SECONDS = "3600";
+export const TEST_AUTH_RENEW_WINDOW_SECONDS = "900";
+export const TEST_AUTH_MAX_SESSION_SECONDS = "28800";
 
 export function createTestRateLimiter(success = true): Env["AUTH_RATE_LIMITER"] {
 	return {

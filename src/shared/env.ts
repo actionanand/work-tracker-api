@@ -7,6 +7,8 @@ export interface Env {
 	AUTH_PASSWORD_ITERATIONS?: string;
 	AUTH_JWT_SECRET: string;
 	AUTH_TOKEN_TTL_SECONDS?: string;
+	AUTH_RENEW_WINDOW_SECONDS?: string;
+	AUTH_MAX_SESSION_SECONDS?: string;
 	AUTH_RATE_LIMITER: RateLimitBinding;
 
 	JIRAS_DATA_SOURCE_ID: string;

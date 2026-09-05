@@ -35,7 +35,10 @@ Successful response:
 {
   "accessToken": "...",
   "tokenType": "Bearer",
-  "expiresIn": 3600
+  "expiresIn": 3600,
+  "expiresAt": "2026-09-03T12:00:00.000Z",
+  "renewAfter": "2026-09-03T11:45:00.000Z",
+  "sessionExpiresAt": "2026-09-03T19:00:00.000Z"
 }
 ```
 
@@ -82,7 +85,10 @@ Authorization: Bearer <accessToken>
 {
   "authenticated": true,
   "subject": "owner",
-  "expiresAt": "2026-09-03T12:00:00.000Z"
+  "expiresAt": "2026-09-03T12:00:00.000Z",
+  "renewAfter": "2026-09-03T11:45:00.000Z",
+  "sessionStartedAt": "2026-09-03T11:00:00.000Z",
+  "sessionExpiresAt": "2026-09-03T19:00:00.000Z"
 }
 ```
 
@@ -93,6 +99,64 @@ Missing, malformed, expired, or invalid tokens return the same generic HTTP 401 
   "error": "Unauthorized"
 }
 ```
+
+## Sliding Session Renewal
+
+```http
+POST /api/auth/renew
+Authorization: Bearer <currentAccessToken>
+```
+
+Renewal is protected and requires a still-valid access token. It does not use the login rate limiter, does not call Notion, and does not use refresh tokens or server-side session storage.
+
+Policy:
+
+- Access token lifetime: 3600 seconds / 1 hour.
+- Renewal window: final 900 seconds / 15 minutes before token expiry.
+- Absolute session lifetime: 28800 seconds / 8 hours from the original password login.
+
+When the current token has more than 15 minutes remaining, renewal is not yet needed:
+
+```json
+{
+  "renewed": false,
+  "expiresAt": "2026-09-03T12:00:00.000Z",
+  "renewAfter": "2026-09-03T11:45:00.000Z",
+  "sessionStartedAt": "2026-09-03T11:00:00.000Z",
+  "sessionExpiresAt": "2026-09-03T19:00:00.000Z"
+}
+```
+
+When renewal is allowed:
+
+```json
+{
+  "renewed": true,
+  "accessToken": "...",
+  "tokenType": "Bearer",
+  "expiresIn": 3600,
+  "expiresAt": "2026-09-03T12:45:00.000Z",
+  "renewAfter": "2026-09-03T12:30:00.000Z",
+  "sessionStartedAt": "2026-09-03T11:00:00.000Z",
+  "sessionExpiresAt": "2026-09-03T19:00:00.000Z"
+}
+```
+
+`expiresIn` can be less than 3600 near the absolute session limit. The Worker never issues a token whose expiry is later than `sessionStartedAt + AUTH_MAX_SESSION_SECONDS`.
+
+After the absolute session lifetime is reached:
+
+```json
+{
+  "error": "Reauthentication required"
+}
+```
+
+Expired access tokens cannot be renewed. Because the Worker remains stateless, the previous token is not revoked after renewal and may remain valid until its own `exp`.
+
+JWT-compatible access tokens include `sessionStartedAt` as a NumericDate. Tokens issued before that claim existed can still renew while valid; the renewed token uses the legacy token's `iat` as `sessionStartedAt`.
+
+PIN or biometric checks in Office Orbit are local app locking only. They cannot renew backend authentication without a valid Worker access token.
 
 ## Configuration
 
@@ -113,7 +177,7 @@ node scripts/generate-auth-password.mjs
 
 The generator prompts for the password interactively and does not print the original password.
 
-`AUTH_JWT_SECRET` must be independent of password verification. `AUTH_TOKEN_TTL_SECONDS` is non-secret Wrangler configuration and defaults to 3600 seconds when absent. Accepted TTL values are 300 through 86400 seconds.
+`AUTH_JWT_SECRET` must be independent of password verification. `AUTH_TOKEN_TTL_SECONDS`, `AUTH_RENEW_WINDOW_SECONDS`, and `AUTH_MAX_SESSION_SECONDS` are non-secret Wrangler configuration. Accepted TTL values are 300 through 86400 seconds. `AUTH_RENEW_WINDOW_SECONDS` must be greater than 0 and less than `AUTH_TOKEN_TTL_SECONDS`. `AUTH_MAX_SESSION_SECONDS` must be at least `AUTH_TOKEN_TTL_SECONDS` and no more than 86400 seconds.
 
 `AUTH_PASSWORD_ITERATIONS` is non-secret Wrangler configuration. The Worker uses PBKDF2-HMAC-SHA256 with 100000 iterations for Cloudflare Workers Web Crypto compatibility. This is lower than general higher-work-factor PBKDF2 recommendations, so login is also protected by the Cloudflare `AUTH_RATE_LIMITER` binding.
 
@@ -178,6 +242,7 @@ AUTH_JWT_SECRET
 ```
 
 `AUTH_PASSWORD_ITERATIONS` and `AUTH_TOKEN_TTL_SECONDS` are non-secret Wrangler configuration and should normally remain in `wrangler.jsonc`.
+`AUTH_RENEW_WINDOW_SECONDS` and `AUTH_MAX_SESSION_SECONDS` are also non-secret Wrangler configuration and should normally remain in `wrangler.jsonc`.
 
 ### 2. Start the local Worker
 
@@ -234,6 +299,9 @@ Inspect the login result without printing the JWT:
 echo "$LOGIN_RESPONSE" | jq '{
   tokenType,
   expiresIn,
+  expiresAt,
+  renewAfter,
+  sessionExpiresAt,
   accessTokenReceived: (.accessToken != null),
   error
 }'
@@ -245,6 +313,9 @@ Expected:
 {
   "tokenType": "Bearer",
   "expiresIn": 3600,
+  "expiresAt": "2026-09-03T12:00:00.000Z",
+  "renewAfter": "2026-09-03T11:45:00.000Z",
+  "sessionExpiresAt": "2026-09-03T19:00:00.000Z",
   "accessTokenReceived": true,
   "error": null
 }
@@ -274,6 +345,28 @@ curl -sS \
 ```
 
 Expected: `authenticated` is `true`, `subject` is `owner`, and `expiresAt` contains the expiry timestamp.
+
+### 8a. Check renewal without printing the JWT
+
+```bash
+RENEW_RESPONSE=$(curl -sS \
+  -X POST \
+  http://localhost:8787/api/auth/renew \
+  -H "Authorization: Bearer $TOKEN")
+
+echo "$RENEW_RESPONSE" | jq '{
+  renewed,
+  tokenType,
+  expiresIn,
+  expiresAt,
+  renewAfter,
+  sessionExpiresAt,
+  accessTokenReceived: (.accessToken != null),
+  error
+}'
+```
+
+Early renewal requests return `renewed: false` and no `accessToken`. Inside the final 15 minutes, `renewed: true` includes a replacement bearer token.
 
 ### 9. Call a protected endpoint with the token
 
