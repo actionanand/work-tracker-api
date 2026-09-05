@@ -17,13 +17,23 @@ export interface NotionDataSourceQueryResponse<TPage = unknown> {
 	next_cursor: string | null;
 }
 
-interface QueryDataSourceOptions {
+export interface QueryDataSourceOptions {
 	dataSourceId: string;
 	env: Env;
 	filter?: NotionQueryFilter;
 	sorts?: NotionQuerySort[];
 	startCursor?: string;
 	pageSize?: number;
+}
+
+export class NotionQueryError extends Error {
+	constructor(
+		readonly status: number,
+		readonly responseText: string,
+	) {
+		super(`Notion API ${status}`);
+		this.name = "NotionQueryError";
+	}
 }
 
 export async function queryNotionDataSource<TPage = unknown>({
@@ -66,7 +76,7 @@ export async function queryNotionDataSource<TPage = unknown>({
 	if (!response.ok) {
 		const error = await response.text();
 
-		throw new Error(`Notion API ${response.status}: ${error}`);
+		throw new NotionQueryError(response.status, error);
 	}
 
 	return response.json();

@@ -70,37 +70,45 @@ const routeCases = [
 	{
 		path: "/api/sprint-allocations",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 		},
 	},
 	{
 		path: "/api/sprint-allocations/current",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: currentFilter,
 		},
 	},
 	{
 		path: "/api/sprint-allocations?sprintId=44444444-4444-4444-4444-444444444444",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: sprintFilter,
 		},
 	},
 	{
 		path: "/api/sprint-allocations?jiraId=55555555-5555-5555-5555-555555555555",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: jiraFilter,
 		},
 	},
 	{
 		path: "/api/sprint-allocations?sprintId=44444444-4444-4444-4444-444444444444&jiraId=55555555-5555-5555-5555-555555555555",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [sprintFilter, jiraFilter],
 			},
+		},
+	},
+	{
+		path: "/api/sprint-allocations/current?pageSize=6&cursor=allocation-cursor",
+		expectedBody: {
+			page_size: 6,
+			start_cursor: "allocation-cursor",
+			filter: currentFilter,
 		},
 	},
 ] as const;

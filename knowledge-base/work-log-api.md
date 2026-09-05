@@ -29,6 +29,8 @@ Multiple supported filters are composed with Notion `and`. Filtering is performe
 
 `projectId` and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called. Date parameters must use `YYYY-MM-DD`.
 
+All Work Log collection endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters change.
+
 Work Logs are sorted by `Date` descending.
 
 ## Response Shape

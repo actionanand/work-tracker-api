@@ -1,6 +1,10 @@
 import type { Env } from "../../shared/env";
 import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import {
+	invalidPaginationCursorResponse,
+	parsePaginationParams,
+} from "../../shared/pagination/pagination";
 import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { combineWorkLinkFilters, workLinkFilters } from "./work-link.filters";
 import { listWorkLinks } from "./work-link.service";
@@ -64,6 +68,12 @@ export async function handleWorkLinkRoutes(
 		return null;
 	}
 
+	const pagination = parsePaginationParams(url);
+
+	if (pagination instanceof Response) {
+		return pagination;
+	}
+
 	const includeRelations = parseIncludeRelations(url);
 
 	if (includeRelations instanceof Response) {
@@ -77,8 +87,18 @@ export async function handleWorkLinkRoutes(
 	}
 
 	try {
-		return Response.json(await listWorkLinks(env, filter, { includeRelations }));
+		return Response.json(
+			await listWorkLinks(env, filter, { includeRelations, pagination }),
+		);
 	} catch (error) {
+		const invalidCursorResponse = pagination.cursor
+			? invalidPaginationCursorResponse(error)
+			: null;
+
+		if (invalidCursorResponse) {
+			return invalidCursorResponse;
+		}
+
 		console.error(error);
 
 		return Response.json(

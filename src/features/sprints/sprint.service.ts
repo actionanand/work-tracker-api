@@ -9,6 +9,7 @@ import {
 	type EnrichedSprint,
 	type IncludeRelationsOption,
 } from "../../shared/relations/relation-enrichment";
+import type { PaginationParams } from "../../shared/pagination/pagination";
 import { mapSprint, type NotionSprintPage, type Sprint } from "./sprint.mapper";
 
 export interface SprintListResponse<TSprint = Sprint> {
@@ -22,13 +23,15 @@ export async function listSprints(
 	env: Env,
 	filter?: NotionQueryFilter,
 	sorts?: NotionQuerySort[],
-	options: IncludeRelationsOption = {},
+	options: IncludeRelationsOption & { pagination?: PaginationParams } = {},
 ): Promise<SprintListResponse<Sprint | EnrichedSprint>> {
 	const notion = await queryNotionDataSource<NotionSprintPage>({
 		dataSourceId: env.SPRINTS_DATA_SOURCE_ID,
 		env,
 		filter,
 		sorts,
+		pageSize: options.pagination?.pageSize,
+		startCursor: options.pagination?.cursor,
 	});
 
 	const data = notion.results.map(mapSprint);

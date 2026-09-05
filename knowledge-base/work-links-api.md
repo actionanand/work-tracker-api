@@ -28,6 +28,8 @@ Multiple supported filters are composed with Notion `and`. Filtering is performe
 
 `companyId` and `projectId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
+Work Link collection endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters or views change.
+
 Work Links are sorted by `Link` ascending using the Notion query API.
 
 ## Response Shape

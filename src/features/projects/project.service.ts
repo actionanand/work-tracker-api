@@ -9,6 +9,7 @@ import {
 	type EnrichedProject,
 	type IncludeRelationsOption,
 } from "../../shared/relations/relation-enrichment";
+import type { PaginationParams } from "../../shared/pagination/pagination";
 import { projectFilters } from "./project.filters";
 import { mapProject, type NotionProjectPage, type Project } from "./project.mapper";
 
@@ -22,12 +23,14 @@ export interface ProjectListResponse<TProject = Project> {
 export async function listProjects(
 	env: Env,
 	filter?: NotionQueryFilter,
-	options: IncludeRelationsOption = {},
+	options: IncludeRelationsOption & { pagination?: PaginationParams } = {},
 ): Promise<ProjectListResponse<Project | EnrichedProject>> {
 	const notion = await queryNotionDataSource<NotionProjectPage>({
 		dataSourceId: env.PROJECTS_DATA_SOURCE_ID,
 		env,
 		filter,
+		pageSize: options.pagination?.pageSize,
+		startCursor: options.pagination?.cursor,
 	});
 
 	const data = notion.results.map(mapProject);

@@ -59,30 +59,37 @@ const routeCases = [
 	{
 		path: "/api/teams",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 		},
 	},
 	{
 		path: "/api/teams/active",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: activeFilter,
 		},
 	},
 	{
 		path: "/api/teams?companyId=11111111-1111-1111-1111-111111111111",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: companyFilter,
 		},
 	},
 	{
 		path: "/api/teams/active?companyId=11111111-1111-1111-1111-111111111111",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [activeFilter, companyFilter],
 			},
+		},
+	},
+	{
+		path: "/api/teams?pageSize=8&cursor=team-cursor",
+		expectedBody: {
+			page_size: 8,
+			start_cursor: "team-cursor",
 		},
 	},
 ] as const;

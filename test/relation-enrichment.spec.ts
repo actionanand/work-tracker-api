@@ -370,6 +370,70 @@ describe("relation enrichment", () => {
 		expect(callsFor(fetchMock, testEnv.JIRAS_DATA_SOURCE_ID)).toHaveLength(2);
 	});
 
+	it("preserves pagination metadata when enriching a paged JIRA list", async () => {
+		const secondJiraId = "77777777-7777-7777-7777-777777777777";
+		let jiraCallCount = 0;
+		const fetchMock = vi.fn((url: string, init: RequestInit) => {
+			const dataSourceId = url.match(/\/data_sources\/([^/]+)\/query$/)?.[1];
+
+			if (dataSourceId === testEnv.JIRAS_DATA_SOURCE_ID) {
+				jiraCallCount += 1;
+
+				return Promise.resolve(
+					jiraCallCount === 1
+						? response(
+								[jiraPage(jiraId), jiraPage(secondJiraId, "CRI-5678", "Second")],
+								"cursor-next",
+							)
+						: response([jiraPage(blockedById, "CRI-1000", "Blocked task")]),
+				);
+			}
+
+			if (dataSourceId === testEnv.PROJECTS_DATA_SOURCE_ID) {
+				return Promise.resolve(response([projectPage()]));
+			}
+
+			if (dataSourceId === testEnv.SPRINTS_DATA_SOURCE_ID) {
+				return Promise.resolve(response([sprintPage()]));
+			}
+
+			return Promise.resolve(Response.json(emptyResponse));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const apiResponse = await fetchWorker(
+			"/api/jiras/active?pageSize=2&cursor=cursor-1&include=relations",
+		);
+		const firstJiraBody = JSON.parse(
+			String(callsFor(fetchMock, testEnv.JIRAS_DATA_SOURCE_ID)[0][1].body),
+		);
+
+		expect(apiResponse.status).toBe(200);
+		expect(firstJiraBody).toMatchObject({
+			page_size: 2,
+			start_cursor: "cursor-1",
+		});
+		expect(await apiResponse.json()).toMatchObject({
+			count: 2,
+			hasMore: true,
+			nextCursor: "cursor-next",
+			data: [
+				{
+					id: jiraId,
+					projects: [projectRef],
+					sprints: [sprintRef],
+					blockedBy: [blockedByRef],
+				},
+				{
+					id: secondJiraId,
+					projects: [projectRef],
+					sprints: [sprintRef],
+					blockedBy: [],
+				},
+			],
+		});
+	});
+
 	it("enriches Work Logs with all shallow relation refs", async () => {
 		const fetchMock = stubCatalogFetch(testEnv.WORK_LOGS_DATA_SOURCE_ID, [workLogPage()]);
 

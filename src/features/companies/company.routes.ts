@@ -1,5 +1,9 @@
 import type { Env } from "../../shared/env";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import {
+	invalidPaginationCursorResponse,
+	parsePaginationParams,
+} from "../../shared/pagination/pagination";
 import { combineCompanyFilters, companyFilters } from "./company.filters";
 import { listCompanies } from "./company.service";
 
@@ -51,9 +55,25 @@ export async function handleCompanyRoutes(
 		return null;
 	}
 
+	const pagination = parsePaginationParams(url);
+
+	if (pagination instanceof Response) {
+		return pagination;
+	}
+
 	try {
-		return Response.json(await listCompanies(env, buildQueryFilter(url, config)));
+		return Response.json(
+			await listCompanies(env, buildQueryFilter(url, config), { pagination }),
+		);
 	} catch (error) {
+		const invalidCursorResponse = pagination.cursor
+			? invalidPaginationCursorResponse(error)
+			: null;
+
+		if (invalidCursorResponse) {
+			return invalidCursorResponse;
+		}
+
 		console.error(error);
 
 		return Response.json(

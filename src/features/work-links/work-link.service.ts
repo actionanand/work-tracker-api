@@ -9,6 +9,7 @@ import {
 	type EnrichedWorkLink,
 	type IncludeRelationsOption,
 } from "../../shared/relations/relation-enrichment";
+import type { PaginationParams } from "../../shared/pagination/pagination";
 import {
 	mapWorkLink,
 	type NotionWorkLinkPage,
@@ -32,13 +33,15 @@ export const workLinkDefaultSorts: NotionQuerySort[] = [
 export async function listWorkLinks(
 	env: Env,
 	filter?: NotionQueryFilter,
-	options: IncludeRelationsOption = {},
+	options: IncludeRelationsOption & { pagination?: PaginationParams } = {},
 ): Promise<WorkLinkListResponse<WorkLink | EnrichedWorkLink>> {
 	const notion = await queryNotionDataSource<NotionWorkLinkPage>({
 		dataSourceId: env.WORK_LINKS_DATA_SOURCE_ID,
 		env,
 		filter,
 		sorts: workLinkDefaultSorts,
+		pageSize: options.pagination?.pageSize,
+		startCursor: options.pagination?.cursor,
 	});
 
 	const data = notion.results.map(mapWorkLink);
