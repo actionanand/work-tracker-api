@@ -115,14 +115,14 @@ const routeCases = [
 	{
 		path: "/api/releases",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			sorts: announcedDateSort,
 		},
 	},
 	{
 		path: "/api/releases/pending",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: pendingFilter,
 			sorts: announcedDateSort,
 		},
@@ -130,7 +130,7 @@ const routeCases = [
 	{
 		path: "/api/releases/confirmed",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: confirmedFilter,
 			sorts: confirmedDateSort,
 		},
@@ -138,7 +138,7 @@ const routeCases = [
 	{
 		path: "/api/releases/not-announced",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: notAnnouncedFilter,
 			sorts: announcedDateSort,
 		},
@@ -146,7 +146,7 @@ const routeCases = [
 	{
 		path: `/api/releases?jiraId=${jiraId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: jiraFilter,
 			sorts: announcedDateSort,
 		},
@@ -154,7 +154,7 @@ const routeCases = [
 	{
 		path: `/api/releases?jiraId=${compactJiraId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: jiraFilter,
 			sorts: announcedDateSort,
 		},
@@ -162,7 +162,7 @@ const routeCases = [
 	{
 		path: "/api/releases?deploymentType=Backstage",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: deploymentTypeFilter,
 			sorts: announcedDateSort,
 		},
@@ -170,7 +170,7 @@ const routeCases = [
 	{
 		path: "/api/releases?component=cortellis",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: componentFilter,
 			sorts: announcedDateSort,
 		},
@@ -178,7 +178,7 @@ const routeCases = [
 	{
 		path: "/api/releases?from=2026-08-01",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: fromFilter,
 			sorts: announcedDateSort,
 		},
@@ -186,7 +186,7 @@ const routeCases = [
 	{
 		path: "/api/releases?to=2026-09-30",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: toFilter,
 			sorts: announcedDateSort,
 		},
@@ -194,7 +194,7 @@ const routeCases = [
 	{
 		path: "/api/releases?from=2026-08-01&to=2026-09-30",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [fromFilter, toFilter],
 			},
@@ -204,7 +204,7 @@ const routeCases = [
 	{
 		path: `/api/releases/pending?jiraId=${jiraId}&deploymentType=Backstage`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [pendingFilter, jiraFilter, deploymentTypeFilter],
 			},
@@ -214,7 +214,7 @@ const routeCases = [
 	{
 		path: `/api/releases?jiraId=${jiraId}&deploymentType=Backstage&component=cortellis&from=2026-08-01&to=2026-09-30`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [
 					jiraFilter,
@@ -375,6 +375,14 @@ function stubNotionFetch() {
 	return fetchMock;
 }
 
+function stubNotionFetchResponse(responseBody: unknown) {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json(responseBody));
+
+	vi.stubGlobal("fetch", fetchMock);
+
+	return fetchMock;
+}
+
 async function fetchWorker(path: string): Promise<Response> {
 	const request = new IncomingRequest(`http://example.com${path}`, {
 		headers: await createAuthHeaders(testEnv),
@@ -456,8 +464,36 @@ describe("Release API routes", () => {
 
 		expect(response.status).toBe(200);
 		expectNotionRequest(fetchMock, {
-			page_size: 100,
+			page_size: 25,
 			sorts: announcedDateSort,
+		});
+	});
+
+	it("sends pagination with Release filters and preserves sort order", async () => {
+		const fetchMock = stubNotionFetchResponse({
+			results: [fullReleasePage],
+			has_more: true,
+			next_cursor: "release-cursor-next",
+		});
+
+		const response = await fetchWorker(
+			`/api/releases?jiraId=${jiraId}&deploymentType=Backstage&pageSize=20&cursor=release-cursor-1`,
+		);
+
+		expect(response.status).toBe(200);
+		expectNotionRequest(fetchMock, {
+			page_size: 20,
+			start_cursor: "release-cursor-1",
+			filter: {
+				and: [jiraFilter, deploymentTypeFilter],
+			},
+			sorts: announcedDateSort,
+		});
+		expect(await response.json()).toEqual({
+			data: [expectedReleaseItem],
+			count: 1,
+			hasMore: true,
+			nextCursor: "release-cursor-next",
 		});
 	});
 

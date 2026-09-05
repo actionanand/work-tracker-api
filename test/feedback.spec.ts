@@ -143,14 +143,14 @@ const routeCases = [
 	{
 		path: "/api/feedback",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			sorts: dateSort,
 		},
 	},
 	{
 		path: "/api/feedback/appraisal",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: appraisalFilter,
 			sorts: dateSort,
 		},
@@ -158,7 +158,7 @@ const routeCases = [
 	{
 		path: "/api/feedback/improvement-follow-up",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: improvementFollowUpFilter,
 			sorts: dateSort,
 		},
@@ -166,7 +166,7 @@ const routeCases = [
 	{
 		path: "/api/feedback/negative",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: negativeFilter,
 			sorts: dateSort,
 		},
@@ -174,7 +174,7 @@ const routeCases = [
 	{
 		path: `/api/feedback?companyId=${companyId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: companyFilter,
 			sorts: dateSort,
 		},
@@ -182,7 +182,7 @@ const routeCases = [
 	{
 		path: `/api/feedback?companyId=${compactCompanyId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: companyFilter,
 			sorts: dateSort,
 		},
@@ -190,7 +190,7 @@ const routeCases = [
 	{
 		path: `/api/feedback?projectId=${projectId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: projectFilter,
 			sorts: dateSort,
 		},
@@ -198,7 +198,7 @@ const routeCases = [
 	{
 		path: `/api/feedback?teamId=${teamId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: teamFilter,
 			sorts: dateSort,
 		},
@@ -206,7 +206,7 @@ const routeCases = [
 	{
 		path: "/api/feedback?personType=Manager",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: personTypeFilter,
 			sorts: dateSort,
 		},
@@ -214,7 +214,7 @@ const routeCases = [
 	{
 		path: "/api/feedback?context=Weekly%20Update",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: contextFilter,
 			sorts: dateSort,
 		},
@@ -222,7 +222,7 @@ const routeCases = [
 	{
 		path: "/api/feedback?feedbackType=Positive",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: feedbackTypeFilter,
 			sorts: dateSort,
 		},
@@ -230,7 +230,7 @@ const routeCases = [
 	{
 		path: "/api/feedback?from=2026-01-01",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: fromFilter,
 			sorts: dateSort,
 		},
@@ -238,7 +238,7 @@ const routeCases = [
 	{
 		path: "/api/feedback?to=2026-12-31",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: toFilter,
 			sorts: dateSort,
 		},
@@ -246,7 +246,7 @@ const routeCases = [
 	{
 		path: "/api/feedback?from=2026-01-01&to=2026-12-31",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [fromFilter, toFilter],
 			},
@@ -256,7 +256,7 @@ const routeCases = [
 	{
 		path: `/api/feedback/negative?companyId=${companyId}&from=2026-01-01&to=2026-12-31`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [negativeFilter, companyFilter, fromFilter, toFilter],
 			},
@@ -266,7 +266,7 @@ const routeCases = [
 	{
 		path: `/api/feedback?companyId=${companyId}&projectId=${projectId}&teamId=${teamId}&personType=Manager&context=Weekly%20Update&feedbackType=Positive&from=2026-01-01&to=2026-12-31`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [
 					companyFilter,
@@ -390,6 +390,14 @@ function stubNotionFetch() {
 	return fetchMock;
 }
 
+function stubNotionFetchResponse(responseBody: unknown) {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json(responseBody));
+
+	vi.stubGlobal("fetch", fetchMock);
+
+	return fetchMock;
+}
+
 async function fetchWorker(path: string): Promise<Response> {
 	const request = new IncomingRequest(`http://example.com${path}`, {
 		headers: await createAuthHeaders(testEnv),
@@ -475,8 +483,36 @@ describe("Feedback API routes", () => {
 
 		expect(response.status).toBe(200);
 		expectNotionRequest(fetchMock, {
-			page_size: 100,
+			page_size: 25,
 			sorts: dateSort,
+		});
+	});
+
+	it("sends pagination with Feedback filters and preserves sort order", async () => {
+		const fetchMock = stubNotionFetchResponse({
+			results: [fullFeedbackPage],
+			has_more: true,
+			next_cursor: "feedback-cursor-next",
+		});
+
+		const response = await fetchWorker(
+			`/api/feedback/negative?companyId=${companyId}&pageSize=15&cursor=feedback-cursor-1`,
+		);
+
+		expect(response.status).toBe(200);
+		expectNotionRequest(fetchMock, {
+			page_size: 15,
+			start_cursor: "feedback-cursor-1",
+			filter: {
+				and: [negativeFilter, companyFilter],
+			},
+			sorts: dateSort,
+		});
+		expect(await response.json()).toEqual({
+			data: [expectedFeedback],
+			count: 1,
+			hasMore: true,
+			nextCursor: "feedback-cursor-next",
 		});
 	});
 

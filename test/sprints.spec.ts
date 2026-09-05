@@ -89,20 +89,20 @@ const routeCases = [
 	{
 		path: "/api/sprints",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 		},
 	},
 	{
 		path: "/api/sprints/active",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: activeFilter,
 		},
 	},
 	{
 		path: "/api/sprints/history",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: historyFilter,
 			sorts: historySort,
 		},
@@ -110,14 +110,14 @@ const routeCases = [
 	{
 		path: "/api/sprints?projectId=33333333-3333-3333-3333-333333333333",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: projectFilter,
 		},
 	},
 	{
 		path: "/api/sprints?from=2026-09-01&to=2026-09-30",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [fromFilter, toFilter],
 			},
@@ -126,7 +126,7 @@ const routeCases = [
 	{
 		path: "/api/sprints/history?projectId=33333333-3333-3333-3333-333333333333&from=2026-09-01&to=2026-09-30",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [historyFilter, projectFilter, fromFilter, toFilter],
 			},
@@ -238,6 +238,14 @@ function stubNotionFetch() {
 	return fetchMock;
 }
 
+function stubNotionFetchResponse(responseBody: unknown) {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json(responseBody));
+
+	vi.stubGlobal("fetch", fetchMock);
+
+	return fetchMock;
+}
+
 function stubSequentialNotionFetch(responses: unknown[]) {
 	const fetchMock = vi.fn();
 
@@ -329,6 +337,34 @@ describe("Sprint API routes", () => {
 		},
 	);
 
+	it("sends pagination with Sprint history filters and preserves newest-first sort", async () => {
+		const fetchMock = stubNotionFetchResponse({
+			results: [fullSprintPage],
+			has_more: true,
+			next_cursor: "sprint-cursor-next",
+		});
+
+		const response = await fetchWorker(
+			"/api/sprints/history?projectId=33333333-3333-3333-3333-333333333333&pageSize=12&cursor=sprint-cursor-1",
+		);
+
+		expect(response.status).toBe(200);
+		expectNotionRequest(fetchMock, {
+			page_size: 12,
+			start_cursor: "sprint-cursor-1",
+			filter: {
+				and: [historyFilter, projectFilter],
+			},
+			sorts: historySort,
+		});
+		expect(await response.json()).toEqual({
+			data: [expectedSprint],
+			count: 1,
+			hasMore: true,
+			nextCursor: "sprint-cursor-next",
+		});
+	});
+
 	it("returns 400 for an invalid from date without calling Notion", async () => {
 		const fetchMock = stubNotionFetch();
 
@@ -380,7 +416,7 @@ describe("Sprint API routes", () => {
 			filter: companyProjectsFilter,
 		});
 		expectNotionCall(fetchMock, 1, "test-sprints-data-source-id", {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [
 					historyFilter,
@@ -432,7 +468,7 @@ describe("Sprint API routes", () => {
 
 		expect(response.status).toBe(200);
 		expectNotionCall(fetchMock, 1, "test-sprints-data-source-id", {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [historyFilter, projectFilter, fromFilter, toFilter],
 			},
@@ -498,7 +534,7 @@ describe("Sprint API routes", () => {
 			start_cursor: "next-project-cursor",
 		});
 		expectNotionCall(fetchMock, 2, "test-sprints-data-source-id", {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [
 					historyFilter,

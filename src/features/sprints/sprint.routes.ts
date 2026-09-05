@@ -4,6 +4,10 @@ import type {
 	NotionQueryFilter,
 	NotionQuerySort,
 } from "../../shared/notion/notion-client";
+import {
+	invalidPaginationCursorResponse,
+	parsePaginationParams,
+} from "../../shared/pagination/pagination";
 import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { listProjectIdsByCompany } from "../projects/project.service";
 import { combineSprintFilters, sprintFilters } from "./sprint.filters";
@@ -144,6 +148,12 @@ export async function handleSprintRoutes(
 		return null;
 	}
 
+	const pagination = parsePaginationParams(url);
+
+	if (pagination instanceof Response) {
+		return pagination;
+	}
+
 	const includeRelations = parseIncludeRelations(url);
 
 	if (includeRelations instanceof Response) {
@@ -158,9 +168,20 @@ export async function handleSprintRoutes(
 
 	try {
 		return Response.json(
-			await listSprints(env, filter, config.sorts, { includeRelations }),
+			await listSprints(env, filter, config.sorts, {
+				includeRelations,
+				pagination,
+			}),
 		);
 	} catch (error) {
+		const invalidCursorResponse = pagination.cursor
+			? invalidPaginationCursorResponse(error)
+			: null;
+
+		if (invalidCursorResponse) {
+			return invalidCursorResponse;
+		}
+
 		console.error(error);
 
 		return Response.json(

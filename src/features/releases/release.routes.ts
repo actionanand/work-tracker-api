@@ -4,6 +4,10 @@ import type {
 	NotionQueryFilter,
 	NotionQuerySort,
 } from "../../shared/notion/notion-client";
+import {
+	invalidPaginationCursorResponse,
+	parsePaginationParams,
+} from "../../shared/pagination/pagination";
 import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { combineReleaseFilters, releaseFilters } from "./release.filters";
 import {
@@ -135,6 +139,12 @@ export async function handleReleaseRoutes(
 		return null;
 	}
 
+	const pagination = parsePaginationParams(url);
+
+	if (pagination instanceof Response) {
+		return pagination;
+	}
+
 	const includeRelations = parseIncludeRelations(url);
 
 	if (includeRelations instanceof Response) {
@@ -149,9 +159,20 @@ export async function handleReleaseRoutes(
 
 	try {
 		return Response.json(
-			await listReleaseItems(env, filter, config.sorts, { includeRelations }),
+			await listReleaseItems(env, filter, config.sorts, {
+				includeRelations,
+				pagination,
+			}),
 		);
 	} catch (error) {
+		const invalidCursorResponse = pagination.cursor
+			? invalidPaginationCursorResponse(error)
+			: null;
+
+		if (invalidCursorResponse) {
+			return invalidCursorResponse;
+		}
+
 		console.error(error);
 
 		return Response.json(

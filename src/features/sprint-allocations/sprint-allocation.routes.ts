@@ -2,6 +2,10 @@ import type { Env } from "../../shared/env";
 import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
 import {
+	invalidPaginationCursorResponse,
+	parsePaginationParams,
+} from "../../shared/pagination/pagination";
+import {
 	combineSprintAllocationFilters,
 	sprintAllocationFilters,
 } from "./sprint-allocation.filters";
@@ -69,6 +73,12 @@ export async function handleSprintAllocationRoutes(
 		return null;
 	}
 
+	const pagination = parsePaginationParams(url);
+
+	if (pagination instanceof Response) {
+		return pagination;
+	}
+
 	const filter = buildQueryFilter(url, config);
 
 	if (filter instanceof Response) {
@@ -76,8 +86,16 @@ export async function handleSprintAllocationRoutes(
 	}
 
 	try {
-		return Response.json(await listSprintAllocations(env, filter));
+		return Response.json(await listSprintAllocations(env, filter, { pagination }));
 	} catch (error) {
+		const invalidCursorResponse = pagination.cursor
+			? invalidPaginationCursorResponse(error)
+			: null;
+
+		if (invalidCursorResponse) {
+			return invalidCursorResponse;
+		}
+
 		console.error(error);
 
 		return Response.json(

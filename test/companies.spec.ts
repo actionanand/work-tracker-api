@@ -53,30 +53,38 @@ const routeCases = [
 	{
 		path: "/api/companies",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 		},
 	},
 	{
 		path: "/api/companies/active",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: activeFilter,
 		},
 	},
 	{
 		path: "/api/companies?category=Office%20Work",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: categoryFilter,
 		},
 	},
 	{
 		path: "/api/companies/active?category=Office%20Work",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [activeFilter, categoryFilter],
 			},
+		},
+	},
+	{
+		path: "/api/companies/active?pageSize=7&cursor=company-cursor",
+		expectedBody: {
+			page_size: 7,
+			start_cursor: "company-cursor",
+			filter: activeFilter,
 		},
 	},
 ] as const;

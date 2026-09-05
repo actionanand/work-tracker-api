@@ -63,6 +63,8 @@ src/
 │   │   ├── auth.responses.ts
 │   │   ├── auth.token.ts
 │   │   └── auth.types.ts
+│   ├── pagination/
+│   │   └── pagination.ts
 │   └── notion/
 │       └── notion-client.ts
 └── features/
@@ -132,6 +134,7 @@ Layer responsibilities:
 | `src/shared/env.ts` | Cloudflare binding interface for secrets and data source IDs. |
 | `src/shared/auth/*` | PBKDF2 password verifier checks, JWT-compatible token signing/verification, auth middleware, and auth responses. |
 | `src/shared/notion/notion-client.ts` | Shared Notion data-source query client, Notion API version, common error handling. |
+| `src/shared/pagination/pagination.ts` | Shared public `pageSize`/`cursor` parser and pagination error responses. |
 | `src/features/auth/auth.routes.ts` | Public login route and protected auth status route. |
 | `src/features/jiras/jira.routes.ts` | JIRA HTTP route selection and route-to-filter mapping. |
 | `src/features/jiras/jira.service.ts` | JIRA query orchestration through the shared Notion client and mapper. |
@@ -193,6 +196,32 @@ All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights requi
 `GET /api/dashboard` supports optional `companyId` and `projectId` query parameters. Release dashboard sections are scoped through matching JIRAs because Release Items do not have a direct Project relation. Project-scoped Dashboard feedback is scoped through the Project's Company relation because Feedback `Project` is a rollup in the live schema.
 
 Selected endpoints support optional shallow relation enrichment with `include=relations`. Existing raw relation ID fields remain unchanged, and default responses are unchanged when `include` is absent.
+
+## API Pagination
+
+Collection/list endpoints support server-side cursor pagination through Notion:
+
+```http
+GET /api/work-logs?pageSize=25
+GET /api/work-logs?pageSize=25&cursor=<nextCursor>
+```
+
+`pageSize` is optional, defaults to `25`, and must be an integer from `1` to `100`. `cursor` is optional, trimmed, treated as opaque, and should be sent back exactly as `nextCursor` from the previous response for the same query context.
+
+Collection responses keep this shape:
+
+```json
+{
+  "data": [],
+  "count": 25,
+  "hasMore": true,
+  "nextCursor": "opaque-cursor"
+}
+```
+
+`count` is the number of records returned in the current page, not the total number of matching rows. The API does not provide `totalCount` and does not fetch all Notion pages just to calculate one. Clients should discard cursors whenever filters, sort order, tab/view, or page size changes.
+
+`GET /api/dashboard` is an aggregate endpoint and is not publicly paginated. `GET /api/jiras/:jiraKey` returns one object and is not paginated.
 
 Root response:
 

@@ -32,6 +32,8 @@ All JIRA list endpoints return:
 
 `GET /api/jiras/:jiraKey` returns a single mapped JIRA object instead of the collection wrapper.
 
+JIRA list endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters or views change. `GET /api/jiras/:jiraKey` is not paginated.
+
 If no matching JIRA exists, the endpoint returns:
 
 ```json

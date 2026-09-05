@@ -9,6 +9,7 @@ import {
 	type EnrichedFeedback,
 	type IncludeRelationsOption,
 } from "../../shared/relations/relation-enrichment";
+import type { PaginationParams } from "../../shared/pagination/pagination";
 import {
 	mapFeedback,
 	type Feedback,
@@ -32,13 +33,15 @@ export const feedbackDateSorts: NotionQuerySort[] = [
 export async function listFeedback(
 	env: Env,
 	filter?: NotionQueryFilter,
-	options: IncludeRelationsOption = {},
+	options: IncludeRelationsOption & { pagination?: PaginationParams } = {},
 ): Promise<FeedbackListResponse<Feedback | EnrichedFeedback>> {
 	const notion = await queryNotionDataSource<NotionFeedbackPage>({
 		dataSourceId: env.FEEDBACK_DATA_SOURCE_ID,
 		env,
 		filter,
 		sorts: feedbackDateSorts,
+		pageSize: options.pagination?.pageSize,
+		startCursor: options.pagination?.cursor,
 	});
 
 	const data = notion.results.map(mapFeedback);

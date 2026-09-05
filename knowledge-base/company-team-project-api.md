@@ -25,6 +25,8 @@ Projects belong to Company and Team independently through Notion relations. API 
 
 Relation-ID query parameters must be valid Notion page IDs. Invalid IDs return HTTP 400 before the Worker calls Notion.
 
+Company, Team, and Project collection endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters or views change.
+
 Mapped Company fields:
 
 ```text

@@ -218,6 +218,14 @@ function stubNotionFetchWithResults(results: unknown[]) {
 	return fetchMock;
 }
 
+function stubNotionFetchWithResponse(responseBody: unknown) {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json(responseBody));
+
+	vi.stubGlobal("fetch", fetchMock);
+
+	return fetchMock;
+}
+
 async function fetchWorker(path: string): Promise<Response> {
 	const request = new IncomingRequest(`http://example.com${path}`, {
 		headers: await createAuthHeaders(testEnv),
@@ -234,6 +242,7 @@ async function fetchWorker(path: string): Promise<Response> {
 function expectNotionPostBody(
 	fetchMock: ReturnType<typeof vi.fn>,
 	expectedFilter: unknown,
+	pageSize = 25,
 ) {
 	expect(fetchMock).toHaveBeenCalledWith(
 		"https://api.notion.com/v1/data_sources/test-jiras-data-source-id/query",
@@ -252,23 +261,27 @@ function expectNotionPostBody(
 
 	if (expectedFilter) {
 		expect(body).toEqual({
-			page_size: 100,
+			page_size: pageSize,
 			filter: expectedFilter,
 		});
 	} else {
 		expect(body).toEqual({
-			page_size: 100,
+			page_size: pageSize,
 		});
 	}
 }
 
 function expectJiraKeyLookupBody(fetchMock: ReturnType<typeof vi.fn>, jiraKey: string) {
-	expectNotionPostBody(fetchMock, {
-		property: "JIRA Key",
-		title: {
-			equals: jiraKey,
+	expectNotionPostBody(
+		fetchMock,
+		{
+			property: "JIRA Key",
+			title: {
+				equals: jiraKey,
+			},
 		},
-	});
+		100,
+	);
 }
 
 describe("Work Tracker API worker", () => {
@@ -313,6 +326,42 @@ describe("Work Tracker API worker", () => {
 			});
 		},
 	);
+
+	it("sends pagination without changing the blocked JIRA filter", async () => {
+		const fetchMock = stubNotionFetchWithResponse({
+			results: [notionJiraPage],
+			has_more: true,
+			next_cursor: "jira-cursor-next",
+		});
+
+		const response = await fetchWorker(
+			"/api/jiras/blocked?pageSize=5&cursor=jira-cursor-1",
+		);
+
+		expect(response.status).toBe(200);
+		const [, requestInit] = fetchMock.mock.calls[0];
+		expect(JSON.parse(String(requestInit.body))).toEqual({
+			page_size: 5,
+			start_cursor: "jira-cursor-1",
+			filter: {
+				and: [
+					activeSprintFilter,
+					{
+						property: "Status",
+						status: {
+							equals: "Blocked",
+						},
+					},
+				],
+			},
+		});
+		expect(await response.json()).toEqual({
+			data: [mappedJira],
+			count: 1,
+			hasMore: true,
+			nextCursor: "jira-cursor-next",
+		});
+	});
 
 	it("returns one JIRA by JIRA key", async () => {
 		const fetchMock = stubNotionFetchWithResults([

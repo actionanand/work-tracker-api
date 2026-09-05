@@ -223,7 +223,9 @@ async function listRecentWorkLogs(env: Env, projectScope: ProjectScope) {
 		]),
 		{
 			includeRelations: true,
-			pageSize: 10,
+			pagination: {
+				pageSize: 10,
+			},
 		},
 	);
 }

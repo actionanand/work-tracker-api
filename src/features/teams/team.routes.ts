@@ -1,6 +1,10 @@
 import type { Env } from "../../shared/env";
 import { parseNotionIdParam } from "../../shared/notion/notion-id";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import {
+	invalidPaginationCursorResponse,
+	parsePaginationParams,
+} from "../../shared/pagination/pagination";
 import { combineTeamFilters, teamFilters } from "./team.filters";
 import { listTeams } from "./team.service";
 
@@ -56,6 +60,12 @@ export async function handleTeamRoutes(
 		return null;
 	}
 
+	const pagination = parsePaginationParams(url);
+
+	if (pagination instanceof Response) {
+		return pagination;
+	}
+
 	const filter = buildQueryFilter(url, config);
 
 	if (filter instanceof Response) {
@@ -63,8 +73,16 @@ export async function handleTeamRoutes(
 	}
 
 	try {
-		return Response.json(await listTeams(env, filter));
+		return Response.json(await listTeams(env, filter, { pagination }));
 	} catch (error) {
+		const invalidCursorResponse = pagination.cursor
+			? invalidPaginationCursorResponse(error)
+			: null;
+
+		if (invalidCursorResponse) {
+			return invalidCursorResponse;
+		}
+
 		console.error(error);
 
 		return Response.json(

@@ -1,5 +1,9 @@
 import type { Env } from "../../shared/env";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import {
+	invalidPaginationCursorResponse,
+	parsePaginationParams,
+} from "../../shared/pagination/pagination";
 import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { jiraFilters } from "./jira.filters";
 import {
@@ -29,6 +33,12 @@ export async function handleJiraRoutes(
 	}
 
 	if (jiraRouteFilters.has(url.pathname)) {
+		const pagination = parsePaginationParams(url);
+
+		if (pagination instanceof Response) {
+			return pagination;
+		}
+
 		const includeRelations = parseIncludeRelations(url);
 
 		if (includeRelations instanceof Response) {
@@ -38,8 +48,18 @@ export async function handleJiraRoutes(
 		const filter = jiraRouteFilters.get(url.pathname);
 
 		try {
-			return Response.json(await listJiras(env, filter, { includeRelations }));
+			return Response.json(
+				await listJiras(env, filter, { includeRelations, pagination }),
+			);
 		} catch (error) {
+			const invalidCursorResponse = pagination.cursor
+				? invalidPaginationCursorResponse(error)
+				: null;
+
+			if (invalidCursorResponse) {
+				return invalidCursorResponse;
+			}
+
 			console.error(error);
 
 			return Response.json(

@@ -101,14 +101,14 @@ const routeCases = [
 	{
 		path: "/api/work-logs",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			sorts: dateSort,
 		},
 	},
 	{
 		path: "/api/work-logs/appraisal",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: appraisalFilter,
 			sorts: dateSort,
 		},
@@ -116,7 +116,7 @@ const routeCases = [
 	{
 		path: "/api/work-logs?from=2026-09-01",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: fromFilter,
 			sorts: dateSort,
 		},
@@ -124,7 +124,7 @@ const routeCases = [
 	{
 		path: "/api/work-logs?to=2026-09-30",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: toFilter,
 			sorts: dateSort,
 		},
@@ -132,7 +132,7 @@ const routeCases = [
 	{
 		path: "/api/work-logs?from=2026-09-01&to=2026-09-30",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [fromFilter, toFilter],
 			},
@@ -142,7 +142,7 @@ const routeCases = [
 	{
 		path: `/api/work-logs?projectId=${projectId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: projectFilter,
 			sorts: dateSort,
 		},
@@ -150,7 +150,7 @@ const routeCases = [
 	{
 		path: `/api/work-logs?projectId=${compactProjectId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: projectFilter,
 			sorts: dateSort,
 		},
@@ -158,7 +158,7 @@ const routeCases = [
 	{
 		path: `/api/work-logs?jiraId=${jiraId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: jiraFilter,
 			sorts: dateSort,
 		},
@@ -166,7 +166,7 @@ const routeCases = [
 	{
 		path: "/api/work-logs?category=Office%20Work",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: categoryFilter,
 			sorts: dateSort,
 		},
@@ -174,7 +174,7 @@ const routeCases = [
 	{
 		path: "/api/work-logs?type=Meeting",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: typeFilter,
 			sorts: dateSort,
 		},
@@ -182,7 +182,7 @@ const routeCases = [
 	{
 		path: "/api/work-logs?workMode=WFO%20(Office)",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: workModeFilter,
 			sorts: dateSort,
 		},
@@ -190,7 +190,7 @@ const routeCases = [
 	{
 		path: `/api/work-logs?from=2026-09-01&to=2026-09-30&projectId=${projectId}&jiraId=${jiraId}&category=Office%20Work&type=Meeting&workMode=WFO%20(Office)`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [
 					fromFilter,
@@ -384,6 +384,14 @@ function stubNotionFetch() {
 	return fetchMock;
 }
 
+function stubNotionFetchResponse(responseBody: unknown, init?: ResponseInit) {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json(responseBody, init));
+
+	vi.stubGlobal("fetch", fetchMock);
+
+	return fetchMock;
+}
+
 async function fetchWorker(path: string): Promise<Response> {
 	const request = new IncomingRequest(`http://example.com${path}`, {
 		headers: await createAuthHeaders(testEnv),
@@ -466,8 +474,55 @@ describe("Work Log API routes", () => {
 
 		expect(response.status).toBe(200);
 		expectNotionRequest(fetchMock, {
-			page_size: 100,
+			page_size: 25,
 			sorts: dateSort,
+		});
+	});
+
+	it("sends pagination with Work Log date filters", async () => {
+		const fetchMock = stubNotionFetchResponse({
+			results: [fullWorkLogPage],
+			has_more: true,
+			next_cursor: "cursor-next",
+		});
+
+		const response = await fetchWorker(
+			"/api/work-logs?from=2026-09-01&to=2026-09-30&pageSize=10&cursor=cursor-2",
+		);
+
+		expect(response.status).toBe(200);
+		expectNotionRequest(fetchMock, {
+			page_size: 10,
+			start_cursor: "cursor-2",
+			filter: {
+				and: [fromFilter, toFilter],
+			},
+			sorts: dateSort,
+		});
+		expect(await response.json()).toEqual({
+			data: [expectedWorkLog],
+			count: 1,
+			hasMore: true,
+			nextCursor: "cursor-next",
+		});
+	});
+
+	it("returns 400 for invalid pagination cursor rejected by Notion", async () => {
+		const fetchMock = stubNotionFetchResponse(
+			{
+				message: "Invalid start_cursor",
+			},
+			{
+				status: 400,
+			},
+		);
+
+		const response = await fetchWorker("/api/work-logs?cursor=stale-cursor");
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid pagination cursor",
 		});
 	});
 

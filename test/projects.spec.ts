@@ -66,34 +66,34 @@ const routeCases = [
 	{
 		path: "/api/projects",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 		},
 	},
 	{
 		path: "/api/projects/active",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: activeFilter,
 		},
 	},
 	{
 		path: "/api/projects?companyId=11111111-1111-1111-1111-111111111111",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: companyFilter,
 		},
 	},
 	{
 		path: "/api/projects?teamId=22222222-2222-2222-2222-222222222222",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: teamFilter,
 		},
 	},
 	{
 		path: "/api/projects?companyId=11111111-1111-1111-1111-111111111111&teamId=22222222-2222-2222-2222-222222222222",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [companyFilter, teamFilter],
 			},
@@ -102,7 +102,7 @@ const routeCases = [
 	{
 		path: "/api/projects/active?companyId=11111111-1111-1111-1111-111111111111&teamId=22222222-2222-2222-2222-222222222222",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [activeFilter, companyFilter, teamFilter],
 			},
@@ -111,8 +111,16 @@ const routeCases = [
 	{
 		path: "/api/projects?companyId=11111111111111111111111111111111",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: companyFilter,
+		},
+	},
+	{
+		path: "/api/projects/active?pageSize=9&cursor=project-cursor",
+		expectedBody: {
+			page_size: 9,
+			start_cursor: "project-cursor",
+			filter: activeFilter,
 		},
 	},
 ] as const;

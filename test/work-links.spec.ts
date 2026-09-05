@@ -80,14 +80,14 @@ const routeCases = [
 	{
 		path: "/api/work-links",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			sorts: linkSort,
 		},
 	},
 	{
 		path: "/api/work-links/active",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: activeFilter,
 			sorts: linkSort,
 		},
@@ -95,7 +95,7 @@ const routeCases = [
 	{
 		path: `/api/work-links?companyId=${companyId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: companyFilter,
 			sorts: linkSort,
 		},
@@ -103,7 +103,7 @@ const routeCases = [
 	{
 		path: `/api/work-links?companyId=${compactCompanyId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: companyFilter,
 			sorts: linkSort,
 		},
@@ -111,7 +111,7 @@ const routeCases = [
 	{
 		path: `/api/work-links?projectId=${projectId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: projectFilter,
 			sorts: linkSort,
 		},
@@ -119,7 +119,7 @@ const routeCases = [
 	{
 		path: "/api/work-links?type=Documentation",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: typeFilter,
 			sorts: linkSort,
 		},
@@ -127,7 +127,7 @@ const routeCases = [
 	{
 		path: `/api/work-links?companyId=${companyId}&projectId=${projectId}&type=Documentation`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [companyFilter, projectFilter, typeFilter],
 			},
@@ -137,7 +137,7 @@ const routeCases = [
 	{
 		path: `/api/work-links/active?companyId=${companyId}`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [activeFilter, companyFilter],
 			},
@@ -147,7 +147,7 @@ const routeCases = [
 	{
 		path: `/api/work-links/active?companyId=${companyId}&projectId=${projectId}&type=Documentation`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [activeFilter, companyFilter, projectFilter, typeFilter],
 			},
@@ -157,7 +157,7 @@ const routeCases = [
 	{
 		path: "/api/work-links?q=github",
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: queryFilter,
 			sorts: linkSort,
 		},
@@ -165,10 +165,19 @@ const routeCases = [
 	{
 		path: `/api/work-links?q=github&companyId=${companyId}&type=Documentation`,
 		expectedBody: {
-			page_size: 100,
+			page_size: 25,
 			filter: {
 				and: [companyFilter, typeFilter, queryFilter],
 			},
+			sorts: linkSort,
+		},
+	},
+	{
+		path: "/api/work-links/active?pageSize=11&cursor=link-cursor",
+		expectedBody: {
+			page_size: 11,
+			start_cursor: "link-cursor",
+			filter: activeFilter,
 			sorts: linkSort,
 		},
 	},
@@ -337,7 +346,7 @@ describe("Work Link API routes", () => {
 
 		expect(response.status).toBe(200);
 		expectNotionRequest(fetchMock, {
-			page_size: 100,
+			page_size: 25,
 			sorts: linkSort,
 		});
 	});

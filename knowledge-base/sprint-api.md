@@ -50,6 +50,8 @@ Relation-ID query parameters such as `projectId` and `companyId` must be valid N
 
 Company-based Sprint history is implemented through the Projects data source. If a Company has no matching Projects, the Worker returns an empty collection without querying Sprints.
 
+Sprint collection endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters or views change. Company-to-Project resolution for Sprint history continues to fetch all matching Projects internally before applying the public Sprint page.
+
 ## Sprint Filters
 
 | Endpoint | Notion Filter Semantics |
@@ -108,6 +110,8 @@ The following optional query parameters are implemented for `/api/sprint-allocat
 If both are provided, they are composed with a Notion `and` filter.
 
 `sprintId` and `jiraId` must be valid Notion page IDs.
+
+Sprint Allocation collection endpoints support the same shared `pageSize` and `cursor` pagination contract.
 
 ## Sprint Allocation Filters
 

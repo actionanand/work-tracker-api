@@ -9,6 +9,7 @@ import {
 	type EnrichedWorkLog,
 	type IncludeRelationsOption,
 } from "../../shared/relations/relation-enrichment";
+import type { PaginationParams } from "../../shared/pagination/pagination";
 import { mapWorkLog, type NotionWorkLogPage, type WorkLog } from "./work-log.mapper";
 
 export interface WorkLogListResponse<TWorkLog = WorkLog> {
@@ -28,14 +29,15 @@ export const workLogDefaultSorts: NotionQuerySort[] = [
 export async function listWorkLogs(
 	env: Env,
 	filter?: NotionQueryFilter,
-	options: IncludeRelationsOption & { pageSize?: number } = {},
+	options: IncludeRelationsOption & { pagination?: PaginationParams } = {},
 ): Promise<WorkLogListResponse<WorkLog | EnrichedWorkLog>> {
 	const notion = await queryNotionDataSource<NotionWorkLogPage>({
 		dataSourceId: env.WORK_LOGS_DATA_SOURCE_ID,
 		env,
 		filter,
 		sorts: workLogDefaultSorts,
-		pageSize: options.pageSize,
+		pageSize: options.pagination?.pageSize,
+		startCursor: options.pagination?.cursor,
 	});
 
 	const data = notion.results.map(mapWorkLog);

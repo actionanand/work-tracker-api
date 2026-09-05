@@ -9,6 +9,7 @@ import {
 	type EnrichedReleaseItem,
 	type IncludeRelationsOption,
 } from "../../shared/relations/relation-enrichment";
+import type { PaginationParams } from "../../shared/pagination/pagination";
 import {
 	mapReleaseItem,
 	type NotionReleasePage,
@@ -40,13 +41,15 @@ export async function listReleaseItems(
 	env: Env,
 	filter?: NotionQueryFilter,
 	sorts: NotionQuerySort[] = releaseAnnouncedDateSorts,
-	options: IncludeRelationsOption = {},
+	options: IncludeRelationsOption & { pagination?: PaginationParams } = {},
 ): Promise<ReleaseItemListResponse<ReleaseItem | EnrichedReleaseItem>> {
 	const notion = await queryNotionDataSource<NotionReleasePage>({
 		dataSourceId: env.RELEASE_ITEMS_DATA_SOURCE_ID,
 		env,
 		filter,
 		sorts,
+		pageSize: options.pagination?.pageSize,
+		startCursor: options.pagination?.cursor,
 	});
 
 	const data = notion.results.map(mapReleaseItem);
