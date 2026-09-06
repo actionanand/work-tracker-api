@@ -3,6 +3,7 @@ import {
 	AUTH_ALGORITHM,
 	AUTH_AUDIENCE,
 	AUTH_ISSUER,
+	AUTH_MAX_SESSION_SECONDS_MAX,
 	AUTH_SUBJECT,
 	AUTH_TOKEN_TTL_SECONDS_DEFAULT,
 	AUTH_TOKEN_TTL_SECONDS_MAX,
@@ -39,6 +40,34 @@ export function getAuthTokenTtlSeconds(env: Env): number {
 	return value;
 }
 
+export function getAuthRenewWindowSeconds(env: Env): number {
+	const tokenTtlSeconds = getAuthTokenTtlSeconds(env);
+	const raw = env.AUTH_RENEW_WINDOW_SECONDS?.trim();
+	const value = raw ? Number(raw) : Number.NaN;
+
+	if (!Number.isInteger(value) || value <= 0 || value >= tokenTtlSeconds) {
+		throw new AuthConfigurationError("AUTH_CONFIG_RENEW_WINDOW_INVALID");
+	}
+
+	return value;
+}
+
+export function getAuthMaxSessionSeconds(env: Env): number {
+	const tokenTtlSeconds = getAuthTokenTtlSeconds(env);
+	const raw = env.AUTH_MAX_SESSION_SECONDS?.trim();
+	const value = raw ? Number(raw) : Number.NaN;
+
+	if (
+		!Number.isInteger(value) ||
+		value < tokenTtlSeconds ||
+		value > AUTH_MAX_SESSION_SECONDS_MAX
+	) {
+		throw new AuthConfigurationError("AUTH_CONFIG_MAX_SESSION_INVALID");
+	}
+
+	return value;
+}
+
 export function validateAuthConfiguration(env: Env): void {
 	if (!isNonEmptySecret(env.AUTH_JWT_SECRET)) {
 		throw new AuthConfigurationError("AUTH_CONFIG_JWT_SECRET_MISSING");
@@ -46,6 +75,8 @@ export function validateAuthConfiguration(env: Env): void {
 
 	validatePasswordConfiguration(env);
 	getAuthTokenTtlSeconds(env);
+	getAuthRenewWindowSeconds(env);
+	getAuthMaxSessionSeconds(env);
 }
 
 function isAuthPayload(value: unknown): value is AuthTokenPayload {
@@ -62,17 +93,35 @@ function isAuthPayload(value: unknown): value is AuthTokenPayload {
 		typeof payload.exp === "number" &&
 		Number.isInteger(payload.exp) &&
 		typeof payload.jti === "string" &&
-		payload.jti.length > 0
+		payload.jti.length > 0 &&
+		(payload.sessionStartedAt === undefined ||
+			(typeof payload.sessionStartedAt === "number" &&
+				Number.isInteger(payload.sessionStartedAt)))
 	);
 }
 
 export async function createAccessToken(
 	env: Env,
 	nowSeconds = Math.floor(Date.now() / 1000),
+	options: { sessionStartedAt?: number } = {},
 ): Promise<{ token: string; payload: AuthTokenPayload; expiresIn: number }> {
 	validateAuthConfiguration(env);
 
-	const expiresIn = getAuthTokenTtlSeconds(env);
+	const tokenTtlSeconds = getAuthTokenTtlSeconds(env);
+	const maxSessionSeconds = getAuthMaxSessionSeconds(env);
+	const sessionStartedAt = options.sessionStartedAt ?? nowSeconds;
+	const sessionExpiresAt = sessionStartedAt + maxSessionSeconds;
+	const exp = Math.min(nowSeconds + tokenTtlSeconds, sessionExpiresAt);
+	const expiresIn = exp - nowSeconds;
+
+	if (
+		!Number.isInteger(sessionStartedAt) ||
+		sessionStartedAt > nowSeconds ||
+		expiresIn <= 0
+	) {
+		throw new AuthConfigurationError("AUTH_CONFIG_MAX_SESSION_INVALID");
+	}
+
 	const header: AuthJwtHeader = {
 		alg: AUTH_ALGORITHM,
 		typ: "JWT",
@@ -82,8 +131,9 @@ export async function createAccessToken(
 		iss: AUTH_ISSUER,
 		aud: AUTH_AUDIENCE,
 		iat: nowSeconds,
-		exp: nowSeconds + expiresIn,
+		exp,
 		jti: crypto.randomUUID(),
+		sessionStartedAt,
 	};
 	const signingInput = `${base64UrlEncodeJson(header)}.${base64UrlEncodeJson(payload)}`;
 	const signature = base64UrlEncode(
@@ -97,10 +147,38 @@ export async function createAccessToken(
 	};
 }
 
+export function getSessionStartedAt(payload: AuthTokenPayload): number {
+	return payload.sessionStartedAt ?? payload.iat;
+}
+
+export function getAuthTokenMetadata(
+	env: Env,
+	payload: AuthTokenPayload,
+): {
+	expiresAt: string;
+	renewAfter: string;
+	sessionStartedAt: string;
+	sessionExpiresAt: string;
+} {
+	const renewWindowSeconds = getAuthRenewWindowSeconds(env);
+	const maxSessionSeconds = getAuthMaxSessionSeconds(env);
+	const sessionStartedAt = getSessionStartedAt(payload);
+
+	return {
+		expiresAt: new Date(payload.exp * 1000).toISOString(),
+		renewAfter: new Date((payload.exp - renewWindowSeconds) * 1000).toISOString(),
+		sessionStartedAt: new Date(sessionStartedAt * 1000).toISOString(),
+		sessionExpiresAt: new Date(
+			(sessionStartedAt + maxSessionSeconds) * 1000,
+		).toISOString(),
+	};
+}
+
 export async function verifyAccessToken(
 	env: Env,
 	token: string,
 	nowSeconds = Math.floor(Date.now() / 1000),
+	options: { enforceSessionLifetime?: boolean } = {},
 ): Promise<AuthTokenPayload | null> {
 	validateAuthConfiguration(env);
 
@@ -131,6 +209,19 @@ export async function verifyAccessToken(
 
 	if (payload.iat > nowSeconds || payload.exp <= nowSeconds || payload.exp <= payload.iat) {
 		return null;
+	}
+
+	if (payload.sessionStartedAt !== undefined) {
+		const maxSessionSeconds = getAuthMaxSessionSeconds(env);
+
+		if (
+			payload.sessionStartedAt > nowSeconds ||
+			payload.sessionStartedAt > payload.iat ||
+			(options.enforceSessionLifetime !== false &&
+				payload.exp > payload.sessionStartedAt + maxSessionSeconds)
+		) {
+			return null;
+		}
 	}
 
 	return payload;

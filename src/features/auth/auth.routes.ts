@@ -6,7 +6,9 @@ import {
 	authConfigurationErrorResponse,
 	badLoginRequestResponse,
 	invalidCredentialsResponse,
+	reauthenticationRequiredResponse,
 	tooManyLoginAttemptsResponse,
+	unauthorizedResponse,
 } from "../../shared/auth/auth.responses";
 import {
 	AuthConfigurationError,
@@ -15,7 +17,11 @@ import {
 } from "../../shared/auth/auth.errors";
 import { verifyPassword } from "../../shared/auth/auth.password";
 import {
+	getAuthMaxSessionSeconds,
 	createAccessToken,
+	getAuthRenewWindowSeconds,
+	getAuthTokenMetadata,
+	getSessionStartedAt,
 	validateAuthConfiguration,
 } from "../../shared/auth/auth.token";
 import type { AuthenticatedRequest } from "../../shared/auth/auth.middleware";
@@ -137,6 +143,7 @@ export async function handlePublicAuthRoutes(
 				accessToken: token.token,
 				tokenType: AUTH_TOKEN_TYPE,
 				expiresIn: token.expiresIn,
+				...getAuthTokenMetadata(env, token.payload),
 			},
 			{
 				headers: {
@@ -160,22 +167,102 @@ export async function handlePublicAuthRoutes(
 export async function handleProtectedAuthRoutes(
 	request: Request,
 	url: URL,
-	_authenticated: AuthenticatedRequest,
+	authenticated: AuthenticatedRequest,
+	env: Env,
 ): Promise<Response | null> {
-	if (request.method !== "GET" || url.pathname !== "/api/auth/status") {
+	if (url.pathname === "/api/auth/status") {
+		if (request.method !== "GET") {
+			return null;
+		}
+
+		return Response.json(
+			{
+				authenticated: true,
+				subject: authenticated.payload.sub,
+				...getAuthTokenMetadata(env, authenticated.payload),
+			},
+			{
+				headers: {
+					"Cache-Control": "no-store",
+				},
+			},
+		);
+	}
+
+	return null;
+}
+
+export async function handleAuthRenewRoute(
+	request: Request,
+	url: URL,
+	authenticated: AuthenticatedRequest,
+	env: Env,
+): Promise<Response | null> {
+	if (request.method !== "POST" || url.pathname !== "/api/auth/renew") {
 		return null;
 	}
 
-	return Response.json(
-		{
-			authenticated: true,
-			subject: _authenticated.payload.sub,
-			expiresAt: new Date(_authenticated.payload.exp * 1000).toISOString(),
-		},
-		{
-			headers: {
-				"Cache-Control": "no-store",
+	try {
+		console.log("AUTH_RENEW_REQUEST_RECEIVED");
+		validateAuthConfiguration(env);
+
+		const nowSeconds = Math.floor(Date.now() / 1000);
+		const sessionStartedAt = getSessionStartedAt(authenticated.payload);
+		const sessionExpiresAt =
+			sessionStartedAt + getAuthMaxSessionSeconds(env);
+
+		if (nowSeconds >= sessionExpiresAt) {
+			console.log("AUTH_RENEW_SESSION_LIMIT_REACHED");
+
+			return reauthenticationRequiredResponse();
+		}
+
+		const renewWindowSeconds = getAuthRenewWindowSeconds(env);
+		const remainingSeconds = authenticated.payload.exp - nowSeconds;
+
+		if (remainingSeconds > renewWindowSeconds) {
+			console.log("AUTH_RENEW_NOT_DUE");
+
+			return Response.json(
+				{
+					renewed: false,
+					...getAuthTokenMetadata(env, authenticated.payload),
+				},
+				{
+					headers: {
+						"Cache-Control": "no-store",
+					},
+				},
+			);
+		}
+
+		const token = await createAccessToken(env, nowSeconds, { sessionStartedAt });
+
+		console.log("AUTH_RENEW_SUCCESS");
+
+		return Response.json(
+			{
+				renewed: true,
+				accessToken: token.token,
+				tokenType: AUTH_TOKEN_TYPE,
+				expiresIn: token.expiresIn,
+				...getAuthTokenMetadata(env, token.payload),
 			},
-		},
-	);
+			{
+				headers: {
+					"Cache-Control": "no-store",
+				},
+			},
+		);
+	} catch (error) {
+		if (error instanceof AuthConfigurationError) {
+			console.error(`AUTH_RENEW_INTERNAL_ERROR:${error.code}`);
+
+			return authConfigurationErrorResponse();
+		}
+
+		console.error("AUTH_RENEW_INTERNAL_ERROR:AUTH_UNEXPECTED_ERROR");
+
+		return authConfigurationErrorResponse();
+	}
 }

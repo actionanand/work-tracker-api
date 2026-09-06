@@ -33,6 +33,21 @@ export function unauthorizedResponse(): Response {
 	);
 }
 
+export function reauthenticationRequiredResponse(): Response {
+	return Response.json(
+		{
+			error: "Reauthentication required",
+		},
+		{
+			status: 401,
+			headers: {
+				"WWW-Authenticate": "Bearer",
+				"Cache-Control": "no-store",
+			},
+		},
+	);
+}
+
 export function invalidCredentialsResponse(): Response {
 	return Response.json(
 		{

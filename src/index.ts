@@ -1,5 +1,6 @@
 import { handleCompanyRoutes } from "./features/companies/company.routes";
 import {
+	handleAuthRenewRoute,
 	handleProtectedAuthRoutes,
 	handlePublicAuthRoutes,
 } from "./features/auth/auth.routes";
@@ -41,12 +42,39 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 		return publicAuthResponse;
 	}
 
+	if (url.pathname === "/api/auth/renew") {
+		const authenticatedForRenew = await authenticateRequest(request, env, {
+			enforceSessionLifetime: false,
+		});
+
+		if (authenticatedForRenew instanceof Response) {
+			console.log("AUTH_RENEW_UNAUTHORIZED");
+
+			return authenticatedForRenew;
+		}
+
+		const renewResponse = await handleAuthRenewRoute(
+			request,
+			url,
+			authenticatedForRenew,
+			env,
+		);
+
+		if (renewResponse) {
+			return renewResponse;
+		}
+	}
+
 	const authenticated =
 		url.pathname.startsWith("/api/")
 			? await authenticateRequest(request, env)
 			: null;
 
 	if (authenticated instanceof Response) {
+		if (url.pathname === "/api/auth/renew") {
+			console.log("AUTH_RENEW_UNAUTHORIZED");
+		}
+
 		return authenticated;
 	}
 
@@ -55,6 +83,7 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 			request,
 			url,
 			authenticated,
+			env,
 		);
 
 		if (authResponse) {

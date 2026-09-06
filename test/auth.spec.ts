@@ -9,6 +9,7 @@ import {
 } from "../src/shared/auth/auth.constants";
 import {
 	base64UrlDecode,
+	base64UrlDecodeJson,
 	base64UrlEncode,
 	base64UrlEncodeJson,
 	constantTimeEqual,
@@ -23,6 +24,8 @@ import {
 } from "../src/shared/auth/auth.password";
 import {
 	createAccessToken,
+	getAuthMaxSessionSeconds,
+	getAuthRenewWindowSeconds,
 	getAuthTokenTtlSeconds,
 	verifyAccessToken,
 } from "../src/shared/auth/auth.token";
@@ -35,6 +38,8 @@ import {
 	TEST_AUTH_PASSWORD_ITERATIONS,
 	TEST_AUTH_PASSWORD_SALT,
 	TEST_AUTH_TOKEN_TTL_SECONDS,
+	TEST_AUTH_RENEW_WINDOW_SECONDS,
+	TEST_AUTH_MAX_SESSION_SECONDS,
 	TEST_LOGIN_PASSWORD,
 } from "./helpers/auth";
 
@@ -57,6 +62,8 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
 		AUTH_PASSWORD_ITERATIONS: TEST_AUTH_PASSWORD_ITERATIONS,
 		AUTH_JWT_SECRET: TEST_AUTH_JWT_SECRET,
 		AUTH_TOKEN_TTL_SECONDS: TEST_AUTH_TOKEN_TTL_SECONDS,
+	AUTH_RENEW_WINDOW_SECONDS: TEST_AUTH_RENEW_WINDOW_SECONDS,
+	AUTH_MAX_SESSION_SECONDS: TEST_AUTH_MAX_SESSION_SECONDS,
 		AUTH_RATE_LIMITER: createCountingRateLimiter().rateLimiter,
 		JIRAS_DATA_SOURCE_ID: "test-jiras-data-source-id",
 		SPRINTS_DATA_SOURCE_ID: "test-sprints-data-source-id",
@@ -131,6 +138,17 @@ async function createCustomToken(
 	return `${signingInput}.${signature}`;
 }
 
+function decodeTokenPayload(token: string): AuthTokenPayload {
+	const [, encodedPayload] = token.split(".");
+	const payload = base64UrlDecodeJson<AuthTokenPayload>(encodedPayload);
+
+	if (!payload) {
+		throw new Error("Token payload did not decode");
+	}
+
+	return payload;
+}
+
 function stubEmptyNotionFetch() {
 	const fetchMock = vi.fn().mockResolvedValue(
 		Response.json({
@@ -169,6 +187,7 @@ function expectAuthServiceUnavailableResponse(response: Response): Promise<unkno
 
 describe("Authentication API", () => {
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 	});
@@ -212,20 +231,28 @@ describe("Authentication API", () => {
 			accessToken: string;
 			tokenType: string;
 			expiresIn: number;
+			expiresAt: string;
+			renewAfter: string;
+			sessionExpiresAt: string;
 		};
+		const payload = await verifyAccessToken(env, body.accessToken);
 
 		expect(response.status).toBe(200);
 		expectCorsHeaders(response);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 		expect(body.tokenType).toBe(AUTH_TOKEN_TYPE);
 		expect(body.expiresIn).toBe(3600);
-		expect(await verifyAccessToken(env, body.accessToken)).toEqual(
+		expect(body.expiresAt).toEqual(expect.any(String));
+		expect(body.renewAfter).toEqual(expect.any(String));
+		expect(body.sessionExpiresAt).toEqual(expect.any(String));
+		expect(payload).toEqual(
 			expect.objectContaining({
 				sub: AUTH_SUBJECT,
 				iss: AUTH_ISSUER,
 				aud: AUTH_AUDIENCE,
 			}),
 		);
+		expect(payload?.sessionStartedAt).toBe(payload?.iat);
 		expect(limit).toHaveBeenCalledWith({ key: "local-development" });
 	});
 
@@ -385,6 +412,16 @@ describe("Authentication API", () => {
 		["too-short TTL", { AUTH_TOKEN_TTL_SECONDS: "60" }],
 		["too-long TTL", { AUTH_TOKEN_TTL_SECONDS: "86401" }],
 		["non-numeric TTL", { AUTH_TOKEN_TTL_SECONDS: "not-a-number" }],
+		["missing renew window", { AUTH_RENEW_WINDOW_SECONDS: undefined }],
+		["zero renew window", { AUTH_RENEW_WINDOW_SECONDS: "0" }],
+		["negative renew window", { AUTH_RENEW_WINDOW_SECONDS: "-1" }],
+		["non-numeric renew window", { AUTH_RENEW_WINDOW_SECONDS: "nope" }],
+		["renew window matching TTL", { AUTH_RENEW_WINDOW_SECONDS: "3600" }],
+		["renew window exceeding TTL", { AUTH_RENEW_WINDOW_SECONDS: "3601" }],
+		["missing max session", { AUTH_MAX_SESSION_SECONDS: undefined }],
+		["max session below TTL", { AUTH_MAX_SESSION_SECONDS: "3599" }],
+		["non-numeric max session", { AUTH_MAX_SESSION_SECONDS: "nope" }],
+		["unreasonably high max session", { AUTH_MAX_SESSION_SECONDS: "86401" }],
 	])("fails closed when auth configuration has %s", async (_name, overrides) => {
 		const response = await fetchWorker(
 			"/api/auth/login",
@@ -486,6 +523,317 @@ describe("Authentication API", () => {
 		expect(body.authenticated).toBe(true);
 		expect(body.subject).toBe(AUTH_SUBJECT);
 		expect(body.expiresAt).toEqual(expect.any(String));
+		expect(body.renewAfter).toEqual(expect.any(String));
+		expect(body.sessionStartedAt).toEqual(expect.any(String));
+		expect(body.sessionExpiresAt).toEqual(expect.any(String));
+		expect(body).not.toHaveProperty("accessToken");
+		expect(body).not.toHaveProperty("password");
+		expect(body).not.toHaveProperty("jwtSecret");
+	});
+
+	it.each([
+		["missing authorization", {}],
+		["malformed bearer token", { Authorization: "Bearer malformed-token" }],
+		[
+			"bad signature",
+			async (env: Env) => {
+				const token = await createAccessToken(env);
+				return { Authorization: `Bearer ${token.token.replace(/\.[^.]+$/, ".bad")}` };
+			},
+		],
+		[
+			"expired token",
+			async (env: Env) => {
+				const nowSeconds = 1_788_393_600;
+				const token = await createAccessToken(env, nowSeconds - 7200);
+				vi.setSystemTime(new Date(nowSeconds * 1000));
+				return { Authorization: `Bearer ${token.token}` };
+			},
+		],
+		[
+			"wrong issuer",
+			async (env: Env) => ({
+				Authorization: `Bearer ${await createCustomToken(env, {
+					nowSeconds: 1_788_393_600,
+					payload: { iss: "other-api", sessionStartedAt: 1_788_393_600 },
+				})}`,
+			}),
+		],
+		[
+			"wrong audience",
+			async (env: Env) => ({
+				Authorization: `Bearer ${await createCustomToken(env, {
+					nowSeconds: 1_788_393_600,
+					payload: { aud: "other-app", sessionStartedAt: 1_788_393_600 },
+				})}`,
+			}),
+		],
+		[
+			"wrong subject",
+			async (env: Env) => ({
+				Authorization: `Bearer ${await createCustomToken(env, {
+					nowSeconds: 1_788_393_600,
+					payload: { sub: "someone-else", sessionStartedAt: 1_788_393_600 },
+				})}`,
+			}),
+		],
+		[
+			"unsupported algorithm",
+			async (env: Env) => ({
+				Authorization: `Bearer ${await createCustomToken(env, {
+					header: { alg: "none" },
+					nowSeconds: 1_788_393_600,
+					payload: { sessionStartedAt: 1_788_393_600 },
+				})}`,
+			}),
+		],
+	])("returns generic 401 for renew with %s", async (_name, headersOrBuild) => {
+		const env = createTestEnv();
+		vi.setSystemTime(new Date(1_788_393_600 * 1000));
+		const headers =
+			typeof headersOrBuild === "function"
+				? await headersOrBuild(env)
+				: headersOrBuild;
+
+		const response = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers,
+			},
+			env,
+		);
+
+		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
+		expect(await response.json()).toEqual({
+			error: "Unauthorized",
+		});
+	});
+
+	it("does not renew a token before the renewal window", async () => {
+		const env = createTestEnv();
+		const nowSeconds = 1_788_393_600;
+		const token = await createAccessToken(env, nowSeconds - 1800);
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${token.token}` },
+			},
+			env,
+		);
+		const body = (await response.json()) as Record<string, unknown>;
+
+		expect(response.status).toBe(200);
+		expectCorsHeaders(response);
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expect(body.renewed).toBe(false);
+		expect(body).not.toHaveProperty("accessToken");
+		expect(body.expiresAt).toBe(new Date(token.payload.exp * 1000).toISOString());
+		expect(body.renewAfter).toBe(
+			new Date((token.payload.exp - 900) * 1000).toISOString(),
+		);
+		expect(body.sessionExpiresAt).toBe(
+			new Date((token.payload.sessionStartedAt as number) * 1000 + 28_800_000).toISOString(),
+		);
+	});
+
+	it.each([
+		["15 minutes remaining", 2700],
+		["5 minutes remaining", 3300],
+	])("renews a token with %s", async (_name, elapsedSeconds) => {
+		const env = createTestEnv();
+		const issuedAt = 1_788_393_600;
+		const nowSeconds = issuedAt + elapsedSeconds;
+		const original = await createAccessToken(env, issuedAt);
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${original.token}` },
+			},
+			env,
+		);
+		const body = (await response.json()) as {
+			renewed: boolean;
+			accessToken: string;
+			tokenType: string;
+			expiresIn: number;
+			expiresAt: string;
+			sessionExpiresAt: string;
+		};
+		const renewedPayload = decodeTokenPayload(body.accessToken);
+
+		expect(response.status).toBe(200);
+		expect(body.renewed).toBe(true);
+		expect(body.tokenType).toBe(AUTH_TOKEN_TYPE);
+		expect(body.expiresIn).toBe(3600);
+		expect(renewedPayload.iat).toBe(nowSeconds);
+		expect(renewedPayload.exp).toBe(nowSeconds + 3600);
+		expect(renewedPayload.jti).not.toBe(original.payload.jti);
+		expect(renewedPayload.sessionStartedAt).toBe(original.payload.sessionStartedAt);
+		expect(await verifyAccessToken(env, body.accessToken, nowSeconds)).toEqual(
+			renewedPayload,
+		);
+		expect(body.expiresAt).toBe(new Date(renewedPayload.exp * 1000).toISOString());
+		expect(body.sessionExpiresAt).toBe(
+			new Date((issuedAt + 28_800) * 1000).toISOString(),
+		);
+	});
+
+	it("renewed tokens authenticate status and protected API routes without calling Notion during renewal", async () => {
+		const env = createTestEnv();
+		const issuedAt = 1_788_393_600;
+		const nowSeconds = issuedAt + 3300;
+		const original = await createAccessToken(env, issuedAt);
+		const fetchMock = stubEmptyNotionFetch();
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		const renewResponse = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${original.token}` },
+			},
+			env,
+		);
+		const renewBody = (await renewResponse.json()) as { accessToken: string };
+
+		expect(fetchMock).not.toHaveBeenCalled();
+
+		const statusResponse = await fetchWorker(
+			"/api/auth/status",
+			{
+				headers: { Authorization: `Bearer ${renewBody.accessToken}` },
+			},
+			env,
+		);
+		const jirasResponse = await fetchWorker(
+			"/api/jiras",
+			{
+				headers: { Authorization: `Bearer ${renewBody.accessToken}` },
+			},
+			env,
+		);
+
+		expect(statusResponse.status).toBe(200);
+		expect(jirasResponse.status).toBe(200);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(await verifyAccessToken(env, original.token, nowSeconds)).toEqual(
+			original.payload,
+		);
+	});
+
+	it("caps renewed token expiry at the absolute session limit", async () => {
+		const env = createTestEnv();
+		const sessionStartedAt = 1_788_393_600;
+		const nowSeconds = sessionStartedAt + 28_200;
+		const original = await createAccessToken(env, sessionStartedAt + 25_200, {
+			sessionStartedAt,
+		});
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${original.token}` },
+			},
+			env,
+		);
+		const body = (await response.json()) as {
+			renewed: boolean;
+			accessToken: string;
+			expiresIn: number;
+		};
+		const renewedPayload = decodeTokenPayload(body.accessToken);
+
+		expect(response.status).toBe(200);
+		expect(body.renewed).toBe(true);
+		expect(body.expiresIn).toBe(600);
+		expect(renewedPayload.exp).toBe(sessionStartedAt + 28_800);
+	});
+
+	it("requires reauthentication after the absolute session limit", async () => {
+		const env = createTestEnv();
+		const sessionStartedAt = 1_788_393_600;
+		const nowSeconds = sessionStartedAt + 28_800;
+		const token = await createCustomToken(env, {
+			nowSeconds: sessionStartedAt + 27_000,
+			payload: {
+				sessionStartedAt,
+				exp: nowSeconds + 300,
+			},
+		});
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+			},
+			env,
+		);
+
+		expect(response.status).toBe(401);
+		expectCorsHeaders(response);
+		expect(await response.json()).toEqual({
+			error: "Reauthentication required",
+		});
+	});
+
+	it("renews valid legacy tokens without sessionStartedAt by preserving the original iat", async () => {
+		const env = createTestEnv();
+		const issuedAt = 1_788_393_600;
+		const nowSeconds = issuedAt + 3300;
+		const legacyToken = await createCustomToken(env, { nowSeconds: issuedAt });
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${legacyToken}` },
+			},
+			env,
+		);
+		const body = (await response.json()) as {
+			renewed: boolean;
+			accessToken: string;
+		};
+		const renewedPayload = decodeTokenPayload(body.accessToken);
+
+		expect(response.status).toBe(200);
+		expect(body.renewed).toBe(true);
+		expect(renewedPayload.sessionStartedAt).toBe(issuedAt);
+	});
+
+	it.each([
+		["future sessionStartedAt", { sessionStartedAt: 1_788_393_601 }],
+		[
+			"sessionStartedAt after iat",
+			{ iat: 1_788_393_500, sessionStartedAt: 1_788_393_501 },
+		],
+		["non-integer sessionStartedAt", { sessionStartedAt: 1.5 }],
+		["expired absolute session", { sessionStartedAt: 1_788_393_600 - 28_801 }],
+	])("rejects tokens with malformed %s", async (_name, payload) => {
+		const env = createTestEnv();
+		const nowSeconds = 1_788_393_600;
+		const token = await createCustomToken(env, {
+			nowSeconds,
+			payload: {
+				...payload,
+				exp: nowSeconds + 3600,
+			},
+		});
+
+		expect(await verifyAccessToken(env, token, nowSeconds)).toBeNull();
 	});
 
 	it.each([
@@ -714,6 +1062,28 @@ describe("Authentication crypto helpers", () => {
 		).toThrow();
 		expect(() =>
 			getAuthTokenTtlSeconds(createTestEnv({ AUTH_TOKEN_TTL_SECONDS: "86401" })),
+		).toThrow();
+	});
+
+	it("validates renewal window and max session configuration", () => {
+		expect(getAuthRenewWindowSeconds(createTestEnv())).toBe(900);
+		expect(getAuthMaxSessionSeconds(createTestEnv())).toBe(28800);
+		expect(() =>
+			getAuthRenewWindowSeconds(
+				createTestEnv({ AUTH_RENEW_WINDOW_SECONDS: undefined }),
+			),
+		).toThrow();
+		expect(() =>
+			getAuthRenewWindowSeconds(createTestEnv({ AUTH_RENEW_WINDOW_SECONDS: "3600" })),
+		).toThrow();
+		expect(() =>
+			getAuthMaxSessionSeconds(createTestEnv({ AUTH_MAX_SESSION_SECONDS: undefined })),
+		).toThrow();
+		expect(() =>
+			getAuthMaxSessionSeconds(createTestEnv({ AUTH_MAX_SESSION_SECONDS: "3599" })),
+		).toThrow();
+		expect(() =>
+			getAuthMaxSessionSeconds(createTestEnv({ AUTH_MAX_SESSION_SECONDS: "86401" })),
 		).toThrow();
 	});
 
