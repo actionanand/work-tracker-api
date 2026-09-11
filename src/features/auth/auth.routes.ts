@@ -17,6 +17,13 @@ import {
 } from "../../shared/auth/auth.errors";
 import { verifyPassword } from "../../shared/auth/auth.password";
 import {
+	createAuthSession,
+	listActiveAuthSessions,
+	parseLoginDeviceMetadata,
+	revokeAuthSession,
+	revokeOtherAuthSessions,
+} from "../../shared/auth/auth.sessions";
+import {
 	getAuthMaxSessionSeconds,
 	createAccessToken,
 	getAuthRenewWindowSeconds,
@@ -25,10 +32,12 @@ import {
 	validateAuthConfiguration,
 } from "../../shared/auth/auth.token";
 import type { AuthenticatedRequest } from "../../shared/auth/auth.middleware";
-import type { LoginRequestBody } from "../../shared/auth/auth.types";
+import type { LoginDeviceMetadata, LoginRequestBody } from "../../shared/auth/auth.types";
 import type { Env } from "../../shared/env";
 
-async function parseLoginBody(request: Request): Promise<string | Response> {
+async function parseLoginBody(
+	request: Request,
+): Promise<{ password: string; device: LoginDeviceMetadata } | Response> {
 	let body: unknown;
 
 	try {
@@ -51,7 +60,16 @@ async function parseLoginBody(request: Request): Promise<string | Response> {
 		return badLoginRequestResponse();
 	}
 
-	return loginBody.password;
+	const device = parseLoginDeviceMetadata(loginBody.device);
+
+	if (device instanceof Response) {
+		return device;
+	}
+
+	return {
+		password: loginBody.password,
+		device,
+	};
 }
 
 async function rateLimitLogin(request: Request, env: Env): Promise<Response | null> {
@@ -89,10 +107,10 @@ export async function handlePublicAuthRoutes(
 
 		console.log("AUTH_RATE_LIMIT_OK");
 
-		const password = await parseLoginBody(request);
+		const login = await parseLoginBody(request);
 
-		if (password instanceof Response) {
-			return password;
+		if (login instanceof Response) {
+			return login;
 		}
 
 		validateAuthConfiguration(env);
@@ -102,7 +120,7 @@ export async function handlePublicAuthRoutes(
 		let credentialsValid: boolean;
 
 		try {
-			credentialsValid = await verifyPassword(password, env);
+			credentialsValid = await verifyPassword(login.password, env);
 		} catch (error) {
 			if (error instanceof AuthConfigurationError) {
 				throw error;
@@ -123,9 +141,26 @@ export async function handlePublicAuthRoutes(
 		console.log("AUTH_TOKEN_SIGN_START");
 
 		let token: Awaited<ReturnType<typeof createAccessToken>>;
+		const nowSeconds = Math.floor(Date.now() / 1000);
+		let session: Awaited<ReturnType<typeof createAuthSession>>;
 
 		try {
-			token = await createAccessToken(env);
+			session = await createAuthSession(env, request, login.device, nowSeconds);
+		} catch (error) {
+			if (error instanceof AuthConfigurationError) {
+				throw error;
+			}
+
+			logAuthDiagnostic("AUTH_SESSION_STORE_ERROR");
+
+			return authConfigurationErrorResponse();
+		}
+
+		try {
+			token = await createAccessToken(env, nowSeconds, {
+				sessionId: session.id,
+				sessionStartedAt: session.createdAt,
+			});
 		} catch (error) {
 			if (error instanceof AuthConfigurationError) {
 				throw error;
@@ -189,6 +224,109 @@ export async function handleProtectedAuthRoutes(
 		);
 	}
 
+	if (url.pathname === "/api/auth/sessions") {
+		if (request.method !== "GET") {
+			return null;
+		}
+
+		try {
+			const sessions = await listActiveAuthSessions(
+				env,
+				authenticated.payload.sub,
+				authenticated.session.id,
+			);
+
+			return Response.json(
+				{ sessions },
+				{ headers: { "Cache-Control": "no-store" } },
+			);
+		} catch {
+			return authConfigurationErrorResponse();
+		}
+	}
+
+	if (url.pathname === "/api/auth/sessions/logout-others") {
+		if (request.method !== "POST") {
+			return null;
+		}
+
+		try {
+			const revokedCount = await revokeOtherAuthSessions(
+				env,
+				authenticated.payload.sub,
+				authenticated.session.id,
+			);
+
+			return Response.json(
+				{
+					success: true,
+					revokedCount,
+				},
+				{ headers: { "Cache-Control": "no-store" } },
+			);
+		} catch {
+			return authConfigurationErrorResponse();
+		}
+	}
+
+	if (url.pathname === "/api/auth/logout") {
+		if (request.method !== "POST") {
+			return null;
+		}
+
+		try {
+			await revokeAuthSession(
+				env,
+				authenticated.payload.sub,
+				authenticated.session.id,
+			);
+
+			return Response.json(
+				{ success: true },
+				{ headers: { "Cache-Control": "no-store" } },
+			);
+		} catch {
+			return authConfigurationErrorResponse();
+		}
+	}
+
+	const sessionDeleteMatch = url.pathname.match(
+		/^\/api\/auth\/sessions\/([^/]+)$/,
+	);
+
+	if (sessionDeleteMatch) {
+		if (request.method !== "DELETE") {
+			return null;
+		}
+
+		let sessionId: string;
+
+		try {
+			sessionId = decodeURIComponent(sessionDeleteMatch[1]).trim();
+		} catch {
+			sessionId = "";
+		}
+
+		if (!sessionId || sessionId.length > 128) {
+			return unauthorizedResponse();
+		}
+
+		try {
+			await revokeAuthSession(env, authenticated.payload.sub, sessionId);
+
+			return Response.json(
+				{
+					success: true,
+					sessionId,
+					currentSession: sessionId === authenticated.session.id,
+				},
+				{ headers: { "Cache-Control": "no-store" } },
+			);
+		} catch {
+			return authConfigurationErrorResponse();
+		}
+	}
+
 	return null;
 }
 
@@ -236,7 +374,10 @@ export async function handleAuthRenewRoute(
 			);
 		}
 
-		const token = await createAccessToken(env, nowSeconds, { sessionStartedAt });
+		const token = await createAccessToken(env, nowSeconds, {
+			sessionStartedAt,
+			sessionId: authenticated.session.id,
+		});
 
 		console.log("AUTH_RENEW_SUCCESS");
 

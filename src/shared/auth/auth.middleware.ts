@@ -1,16 +1,18 @@
 import type { Env } from "../env";
 import { unauthorizedResponse } from "./auth.responses";
+import { getAuthSessionForPayload } from "./auth.sessions";
 import { verifyAccessToken } from "./auth.token";
-import type { AuthTokenPayload } from "./auth.types";
+import type { AuthSessionRecord, AuthTokenPayload } from "./auth.types";
 
 export interface AuthenticatedRequest {
 	payload: AuthTokenPayload;
+	session: AuthSessionRecord;
 }
 
 export async function authenticateRequest(
 	request: Request,
 	env: Env,
-	options: { enforceSessionLifetime?: boolean } = {},
+	options: { enforceSessionLifetime?: boolean; allowExpiredSession?: boolean } = {},
 ): Promise<AuthenticatedRequest | Response> {
 	const authorization = request.headers.get("Authorization");
 
@@ -36,7 +38,22 @@ export async function authenticateRequest(
 		return unauthorizedResponse();
 	}
 
+	let session: AuthSessionRecord | null;
+
+	try {
+		session = await getAuthSessionForPayload(env, payload, undefined, {
+			allowExpired: options.allowExpiredSession,
+		});
+	} catch {
+		return unauthorizedResponse();
+	}
+
+	if (!session) {
+		return unauthorizedResponse();
+	}
+
 	return {
 		payload,
+		session,
 	};
 }

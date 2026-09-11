@@ -61,6 +61,7 @@ src/
 │   │   ├── auth.middleware.ts
 │   │   ├── auth.password.ts
 │   │   ├── auth.responses.ts
+│   │   ├── auth.sessions.ts
 │   │   ├── auth.token.ts
 │   │   └── auth.types.ts
 │   ├── pagination/
@@ -132,7 +133,7 @@ Layer responsibilities:
 | --- | --- |
 | `src/index.ts` | Cloudflare Worker entry point, root health response, route delegation, fallback 404. |
 | `src/shared/env.ts` | Cloudflare binding interface for secrets and data source IDs. |
-| `src/shared/auth/*` | PBKDF2 password verifier checks, JWT-compatible token signing/verification, auth middleware, and auth responses. |
+| `src/shared/auth/*` | PBKDF2 password verifier checks, JWT-compatible token signing/verification, D1-backed active sessions, auth middleware, and auth responses. |
 | `src/shared/notion/notion-client.ts` | Shared Notion data-source query client, Notion API version, common error handling. |
 | `src/shared/pagination/pagination.ts` | Shared public `pageSize`/`cursor` parser and pagination error responses. |
 | `src/features/auth/auth.routes.ts` | Public login route and protected auth status route. |
@@ -159,6 +160,10 @@ Layer responsibilities:
 | `POST` | `/api/auth/login` | Public login route. Returns a short-lived bearer access token. |
 | `POST` | `/api/auth/renew` | Protected sliding-session renewal route. Returns a new access token only inside the renewal window. |
 | `GET` | `/api/auth/status` | Protected auth status route. |
+| `GET` | `/api/auth/sessions` | Protected on-demand list of active sessions/devices for the current user. |
+| `DELETE` | `/api/auth/sessions/:sessionId` | Protected session revocation route for one current-user session. |
+| `POST` | `/api/auth/sessions/logout-others` | Protected route that revokes all active current-user sessions except the current one. |
+| `POST` | `/api/auth/logout` | Protected route that revokes the current session. |
 | `GET` | `/api/jiras` | All JIRAs from the configured Notion data source. |
 | `GET` | `/api/jiras/active` | JIRAs in the active sprint. |
 | `GET` | `/api/jiras/blocked` | Active sprint JIRAs with `Status = Blocked`. |
@@ -194,7 +199,7 @@ Layer responsibilities:
 
 All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
-Auth access tokens last 1 hour. While a token is still valid, clients may call `POST /api/auth/renew` during the final 15 minutes to receive a replacement token. Sessions have an absolute 8-hour lifetime from the original password login, so renewal eventually returns HTTP 401 with `Reauthentication required` and the password must be entered again. Renewal is stateless, uses the current bearer token, does not use refresh tokens, and does not call Notion.
+Auth access tokens last 1 hour. While a token is still valid and its backing D1 session is still active, clients may call `POST /api/auth/renew` during the final 15 minutes to receive a replacement token. Sessions have an absolute 8-hour lifetime from the original password login, so renewal eventually returns HTTP 401 with `Reauthentication required` and the password must be entered again. Renewal uses the current bearer token, reuses the existing `sid`, does not use refresh tokens, and does not call Notion.
 
 `GET /api/dashboard` supports optional `companyId` and `projectId` query parameters. Release dashboard sections are scoped through matching JIRAs because Release Items do not have a direct Project relation. Project-scoped Dashboard feedback is scoped through the Project's Company relation because Feedback `Project` is a rollup in the live schema.
 
@@ -321,6 +326,32 @@ Configure non-secret IDs in `wrangler.jsonc`:
 }
 ```
 
+Create and bind the D1 database used for active authentication sessions. This stores session/device metadata only; it must not store passwords, password hashes, JWTs, JWT IDs, JWT secrets, or Notion tokens.
+
+```bash
+npx wrangler d1 create work-tracker-auth
+```
+
+After Wrangler prints the new `database_id`, add the binding to `wrangler.jsonc`:
+
+```jsonc
+"d1_databases": [
+  {
+    "binding": "AUTH_DB",
+    "database_name": "work-tracker-auth",
+    "database_id": "<database_id_from_wrangler_d1_create>"
+  }
+]
+```
+
+Apply the checked-in migration locally and remotely:
+
+```bash
+npx wrangler d1 migrations apply work-tracker-auth --local
+npx wrangler d1 migrations apply work-tracker-auth --remote
+npx wrangler types
+```
+
 Production auth secrets should be configured as Cloudflare Worker secrets:
 
 ```bash
@@ -355,6 +386,7 @@ TOKEN=$(curl -s http://localhost:8787/api/auth/login \
   -d '{"password":"your_work_tracker_password_here"}' | jq -r .accessToken)
 curl -s http://localhost:8787/api/jiras -H "Authorization: Bearer $TOKEN" | jq
 curl -s -X POST http://localhost:8787/api/auth/renew -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/auth/sessions -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/jiras/blocked -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/jiras/CRI-1234 -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/sprints/active -H "Authorization: Bearer $TOKEN" | jq

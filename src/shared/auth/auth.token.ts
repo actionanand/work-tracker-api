@@ -94,6 +94,8 @@ function isAuthPayload(value: unknown): value is AuthTokenPayload {
 		Number.isInteger(payload.exp) &&
 		typeof payload.jti === "string" &&
 		payload.jti.length > 0 &&
+		typeof payload.sid === "string" &&
+		payload.sid.length > 0 &&
 		(payload.sessionStartedAt === undefined ||
 			(typeof payload.sessionStartedAt === "number" &&
 				Number.isInteger(payload.sessionStartedAt)))
@@ -103,13 +105,14 @@ function isAuthPayload(value: unknown): value is AuthTokenPayload {
 export async function createAccessToken(
 	env: Env,
 	nowSeconds = Math.floor(Date.now() / 1000),
-	options: { sessionStartedAt?: number } = {},
+	options: { sessionStartedAt?: number; sessionId?: string } = {},
 ): Promise<{ token: string; payload: AuthTokenPayload; expiresIn: number }> {
 	validateAuthConfiguration(env);
 
 	const tokenTtlSeconds = getAuthTokenTtlSeconds(env);
 	const maxSessionSeconds = getAuthMaxSessionSeconds(env);
 	const sessionStartedAt = options.sessionStartedAt ?? nowSeconds;
+	const sessionId = options.sessionId ?? crypto.randomUUID();
 	const sessionExpiresAt = sessionStartedAt + maxSessionSeconds;
 	const exp = Math.min(nowSeconds + tokenTtlSeconds, sessionExpiresAt);
 	const expiresIn = exp - nowSeconds;
@@ -117,6 +120,7 @@ export async function createAccessToken(
 	if (
 		!Number.isInteger(sessionStartedAt) ||
 		sessionStartedAt > nowSeconds ||
+		sessionId.trim().length === 0 ||
 		expiresIn <= 0
 	) {
 		throw new AuthConfigurationError("AUTH_CONFIG_MAX_SESSION_INVALID");
@@ -133,6 +137,7 @@ export async function createAccessToken(
 		iat: nowSeconds,
 		exp,
 		jti: crypto.randomUUID(),
+		sid: sessionId,
 		sessionStartedAt,
 	};
 	const signingInput = `${base64UrlEncodeJson(header)}.${base64UrlEncodeJson(payload)}`;

@@ -5,6 +5,7 @@ import type { Env } from "../src/shared/env";
 import {
 	createAuthHeaders,
 	createTestRateLimiter,
+	createTestAuthDb,
 	TEST_AUTH_JWT_SECRET,
 	TEST_AUTH_PASSWORD_HASH,
 	TEST_AUTH_PASSWORD_ITERATIONS,
@@ -26,6 +27,7 @@ const testEnv: Env = {
 	AUTH_RENEW_WINDOW_SECONDS: TEST_AUTH_RENEW_WINDOW_SECONDS,
 	AUTH_MAX_SESSION_SECONDS: TEST_AUTH_MAX_SESSION_SECONDS,
 	AUTH_RATE_LIMITER: createTestRateLimiter(),
+	AUTH_DB: createTestAuthDb(),
 	JIRAS_DATA_SOURCE_ID: "test-jiras-data-source-id",
 	SPRINTS_DATA_SOURCE_ID: "test-sprints-data-source-id",
 	SPRINT_ALLOCATIONS_DATA_SOURCE_ID: "test-sprint-allocations-data-source-id",
