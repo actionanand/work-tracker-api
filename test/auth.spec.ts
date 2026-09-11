@@ -1,6 +1,7 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
+import { createAuthSession } from "../src/shared/auth/auth.sessions";
 import {
 	AUTH_AUDIENCE,
 	AUTH_ISSUER,
@@ -33,6 +34,7 @@ import type { AuthJwtHeader, AuthTokenPayload } from "../src/shared/auth/auth.ty
 import type { Env } from "../src/shared/env";
 import {
 	createAuthHeaders,
+	createTestAuthDb,
 	TEST_AUTH_JWT_SECRET,
 	TEST_AUTH_PASSWORD_HASH,
 	TEST_AUTH_PASSWORD_ITERATIONS,
@@ -41,6 +43,7 @@ import {
 	TEST_AUTH_RENEW_WINDOW_SECONDS,
 	TEST_AUTH_MAX_SESSION_SECONDS,
 	TEST_LOGIN_PASSWORD,
+	type TestAuthD1Database,
 } from "./helpers/auth";
 
 const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
@@ -62,9 +65,10 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
 		AUTH_PASSWORD_ITERATIONS: TEST_AUTH_PASSWORD_ITERATIONS,
 		AUTH_JWT_SECRET: TEST_AUTH_JWT_SECRET,
 		AUTH_TOKEN_TTL_SECONDS: TEST_AUTH_TOKEN_TTL_SECONDS,
-	AUTH_RENEW_WINDOW_SECONDS: TEST_AUTH_RENEW_WINDOW_SECONDS,
-	AUTH_MAX_SESSION_SECONDS: TEST_AUTH_MAX_SESSION_SECONDS,
+		AUTH_RENEW_WINDOW_SECONDS: TEST_AUTH_RENEW_WINDOW_SECONDS,
+		AUTH_MAX_SESSION_SECONDS: TEST_AUTH_MAX_SESSION_SECONDS,
 		AUTH_RATE_LIMITER: createCountingRateLimiter().rateLimiter,
+		AUTH_DB: createTestAuthDb(),
 		JIRAS_DATA_SOURCE_ID: "test-jiras-data-source-id",
 		SPRINTS_DATA_SOURCE_ID: "test-sprints-data-source-id",
 		SPRINT_ALLOCATIONS_DATA_SOURCE_ID: "test-sprint-allocations-data-source-id",
@@ -104,6 +108,38 @@ function loginRequest(password: unknown): RequestInit {
 		},
 		body: JSON.stringify({ password }),
 	};
+}
+
+function loginRequestWithDevice(password: unknown, device: unknown): RequestInit {
+	return {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"User-Agent": "Office Orbit Test/1.0",
+			"CF-Connecting-IP": "203.0.113.25",
+			"CF-IPCountry": "IN",
+		},
+		body: JSON.stringify({ password, device }),
+	};
+}
+
+async function createSessionBackedAccessToken(
+	env: Env,
+	nowSeconds: number,
+	options: { sessionStartedAt?: number } = {},
+): Promise<Awaited<ReturnType<typeof createAccessToken>>> {
+	const sessionStartedAt = options.sessionStartedAt ?? nowSeconds;
+	const session = await createAuthSession(
+		env,
+		new Request("http://example.com/session-backed-token"),
+		{},
+		sessionStartedAt,
+	);
+
+	return createAccessToken(env, nowSeconds, {
+		sessionId: session.id,
+		sessionStartedAt,
+	});
 }
 
 async function createCustomToken(
@@ -149,6 +185,16 @@ function decodeTokenPayload(token: string): AuthTokenPayload {
 	return payload;
 }
 
+function authHeaders(token: string): HeadersInit {
+	return {
+		Authorization: `Bearer ${token}`,
+	};
+}
+
+function authDb(env: Env): TestAuthD1Database {
+	return env.AUTH_DB as TestAuthD1Database;
+}
+
 function stubEmptyNotionFetch() {
 	const fetchMock = vi.fn().mockResolvedValue(
 		Response.json({
@@ -166,7 +212,7 @@ function stubEmptyNotionFetch() {
 function expectCorsHeaders(response: Response): void {
 	expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
 	expect(response.headers.get("Access-Control-Allow-Methods")).toBe(
-		"GET, POST, OPTIONS",
+		"GET, POST, DELETE, OPTIONS",
 	);
 	expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
 		"Authorization",
@@ -253,7 +299,109 @@ describe("Authentication API", () => {
 			}),
 		);
 		expect(payload?.sessionStartedAt).toBe(payload?.iat);
+		expect(payload?.sid).toEqual(expect.any(String));
+		expect(authDb(env).rows.get(payload?.sid as string)).toEqual(
+			expect.objectContaining({
+				id: payload?.sid,
+				subject: AUTH_SUBJECT,
+				revoked_at: null,
+			}),
+		);
 		expect(limit).toHaveBeenCalledWith({ key: "local-development" });
+	});
+
+	it("logs in without optional device metadata", async () => {
+		const env = createTestEnv();
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+			env,
+		);
+		const body = (await response.json()) as { accessToken: string };
+		const payload = decodeTokenPayload(body.accessToken);
+		const session = authDb(env).rows.get(payload.sid as string);
+
+		expect(response.status).toBe(200);
+		expect(session).toEqual(
+			expect.objectContaining({
+				device_id: null,
+				device_name: null,
+				platform: null,
+				device_model: null,
+				app_version: null,
+			}),
+		);
+	});
+
+	it("stores and returns validated device metadata for login sessions", async () => {
+		const env = createTestEnv();
+
+		const loginResponse = await fetchWorker(
+			"/api/auth/login",
+			loginRequestWithDevice(TEST_LOGIN_PASSWORD, {
+				deviceId: "android-installation-1",
+				name: "Samsung Galaxy",
+				platform: "android",
+				model: "SM-S928B",
+				appVersion: "2.3.4",
+			}),
+			env,
+		);
+		const loginBody = (await loginResponse.json()) as { accessToken: string };
+		const sessionsResponse = await fetchWorker(
+			"/api/auth/sessions",
+			{ headers: authHeaders(loginBody.accessToken) },
+			env,
+		);
+		const body = (await sessionsResponse.json()) as {
+			sessions: Array<Record<string, unknown>>;
+		};
+
+		expect(loginResponse.status).toBe(200);
+		expect(sessionsResponse.status).toBe(200);
+		expect(body.sessions).toHaveLength(1);
+		expect(body.sessions[0]).toEqual(
+			expect.objectContaining({
+				current: true,
+				ipAddress: "203.0.113.25",
+				country: "IN",
+				device: {
+					deviceId: "android-installation-1",
+					name: "Samsung Galaxy",
+					platform: "android",
+					model: "SM-S928B",
+					appVersion: "2.3.4",
+				},
+			}),
+		);
+		expect(body.sessions[0]).not.toHaveProperty("jti");
+		expect(body.sessions[0]).not.toHaveProperty("accessToken");
+	});
+
+	it.each([
+		["non-object device", "android"],
+		["array device", []],
+		["oversized deviceId", { deviceId: "x".repeat(129) }],
+		["oversized name", { name: "x".repeat(129) }],
+		["oversized platform", { platform: "x".repeat(33) }],
+		["oversized model", { model: "x".repeat(129) }],
+		["oversized appVersion", { appVersion: "x".repeat(65) }],
+		["non-string deviceId", { deviceId: 123 }],
+	])("rejects malformed device metadata: %s", async (_name, device) => {
+		const env = createTestEnv();
+
+		const response = await fetchWorker(
+			"/api/auth/login",
+			loginRequestWithDevice(TEST_LOGIN_PASSWORD, device),
+			env,
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid login request",
+		});
+		expect(authDb(env).rows.size).toBe(0);
 	});
 
 	it("keeps POST /api/auth/login public before bearer auth middleware", async () => {
@@ -531,6 +679,366 @@ describe("Authentication API", () => {
 		expect(body).not.toHaveProperty("jwtSecret");
 	});
 
+	it("lists active sessions on demand with the current session first", async () => {
+		const env = createTestEnv();
+		const nowSeconds = 1_788_393_600;
+		const current = await createSessionBackedAccessToken(env, nowSeconds);
+		const older = await createSessionBackedAccessToken(env, nowSeconds - 60);
+		const expired = await createSessionBackedAccessToken(env, nowSeconds - 120);
+		const revoked = await createSessionBackedAccessToken(env, nowSeconds - 180);
+
+		authDb(env).rows.get(older.payload.sid as string)!.last_seen_at =
+			nowSeconds + 30;
+		authDb(env).rows.get(expired.payload.sid as string)!.expires_at =
+			nowSeconds - 1;
+		authDb(env).rows.get(revoked.payload.sid as string)!.revoked_at =
+			nowSeconds - 1;
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/sessions",
+			{
+				headers: authHeaders(current.token),
+			},
+			env,
+		);
+		const body = (await response.json()) as {
+			sessions: Array<{ id: string; current: boolean }>;
+		};
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expect(body.sessions.map((session) => session.id)).toEqual([
+			current.payload.sid,
+			older.payload.sid,
+		]);
+		expect(body.sessions[0].current).toBe(true);
+		expect(body.sessions[1].current).toBe(false);
+		expect(body.sessions[0]).not.toHaveProperty("accessToken");
+		expect(body.sessions[0]).not.toHaveProperty("jti");
+	});
+
+	it("requires authentication before listing sessions", async () => {
+		const response = await fetchWorker("/api/auth/sessions");
+
+		expect(response.status).toBe(401);
+		expect(await response.json()).toEqual({
+			error: "Unauthorized",
+		});
+	});
+
+	it("does not run the session listing query during login, status, or renewal", async () => {
+		const env = createTestEnv();
+		const issuedAt = 1_788_393_600;
+		vi.setSystemTime(new Date(issuedAt * 1000));
+
+		const loginResponse = await fetchWorker(
+			"/api/auth/login",
+			loginRequest(TEST_LOGIN_PASSWORD),
+			env,
+		);
+		const loginBody = (await loginResponse.json()) as { accessToken: string };
+		vi.setSystemTime(new Date((issuedAt + 3300) * 1000));
+
+		const statusResponse = await fetchWorker(
+			"/api/auth/status",
+			{
+				headers: authHeaders(loginBody.accessToken),
+			},
+			env,
+		);
+		const renewResponse = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: authHeaders(loginBody.accessToken),
+			},
+			env,
+		);
+
+		expect(loginResponse.status).toBe(200);
+		expect(statusResponse.status).toBe(200);
+		expect(renewResponse.status).toBe(200);
+		expect(authDb(env).operations.some((sql) => sql.includes("ORDER BY CASE"))).toBe(
+			false,
+		);
+	});
+
+	it("revokes a target session idempotently without revoking the current session", async () => {
+		const env = createTestEnv();
+		const nowSeconds = 1_788_393_600;
+		const current = await createSessionBackedAccessToken(env, nowSeconds);
+		const target = await createSessionBackedAccessToken(env, nowSeconds + 1);
+
+		vi.setSystemTime(new Date((nowSeconds + 60) * 1000));
+
+		const response = await fetchWorker(
+			`/api/auth/sessions/${target.payload.sid}`,
+			{
+				method: "DELETE",
+				headers: authHeaders(current.token),
+			},
+			env,
+		);
+		const body = await response.json();
+		const secondResponse = await fetchWorker(
+			`/api/auth/sessions/${target.payload.sid}`,
+			{
+				method: "DELETE",
+				headers: authHeaders(current.token),
+			},
+			env,
+		);
+
+		expect(response.status).toBe(200);
+		expect(body).toEqual({
+			success: true,
+			sessionId: target.payload.sid,
+			currentSession: false,
+		});
+		expect(secondResponse.status).toBe(200);
+		expect(authDb(env).rows.get(target.payload.sid as string)?.revoked_at).toEqual(
+			expect.any(Number),
+		);
+		expect(authDb(env).rows.get(current.payload.sid as string)?.revoked_at).toBeNull();
+	});
+
+	it("does not allow one subject to revoke another subject's session", async () => {
+		const env = createTestEnv();
+		const nowSeconds = 1_788_393_600;
+		const current = await createSessionBackedAccessToken(env, nowSeconds);
+		const currentRow = authDb(env).rows.get(current.payload.sid as string);
+
+		expect(currentRow).toBeDefined();
+		authDb(env).rows.set("other-subject-session", {
+			...currentRow!,
+			id: "other-subject-session",
+			subject: "someone-else",
+			revoked_at: null,
+		});
+		vi.setSystemTime(new Date((nowSeconds + 60) * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/sessions/other-subject-session",
+			{
+				method: "DELETE",
+				headers: authHeaders(current.token),
+			},
+			env,
+		);
+
+		expect(response.status).toBe(200);
+		expect(authDb(env).rows.get("other-subject-session")?.revoked_at).toBeNull();
+	});
+
+	it("revokes the current session on logout", async () => {
+		const env = createTestEnv();
+		const nowSeconds = 1_788_393_600;
+		const token = await createSessionBackedAccessToken(env, nowSeconds);
+
+		vi.setSystemTime(new Date((nowSeconds + 60) * 1000));
+
+		const logoutResponse = await fetchWorker(
+			"/api/auth/logout",
+			{
+				method: "POST",
+				headers: authHeaders(token.token),
+			},
+			env,
+		);
+		const statusResponse = await fetchWorker(
+			"/api/auth/status",
+			{
+				headers: authHeaders(token.token),
+			},
+			env,
+		);
+
+		expect(logoutResponse.status).toBe(200);
+		expect(await logoutResponse.json()).toEqual({ success: true });
+		expect(statusResponse.status).toBe(401);
+	});
+
+	it("revokes other active sessions while keeping the current session usable", async () => {
+		const env = createTestEnv();
+		const nowSeconds = 1_788_393_600;
+		const current = await createSessionBackedAccessToken(env, nowSeconds);
+		const otherOne = await createSessionBackedAccessToken(env, nowSeconds + 1);
+		const otherTwo = await createSessionBackedAccessToken(env, nowSeconds + 2);
+
+		vi.setSystemTime(new Date((nowSeconds + 60) * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/sessions/logout-others",
+			{
+				method: "POST",
+				headers: authHeaders(current.token),
+			},
+			env,
+		);
+		const body = await response.json();
+		const statusResponse = await fetchWorker(
+			"/api/auth/status",
+			{
+				headers: authHeaders(current.token),
+			},
+			env,
+		);
+
+		expect(response.status).toBe(200);
+		expect(body).toEqual({ success: true, revokedCount: 2 });
+		expect(authDb(env).rows.get(current.payload.sid as string)?.revoked_at).toBeNull();
+		expect(authDb(env).rows.get(otherOne.payload.sid as string)?.revoked_at).toEqual(
+			expect.any(Number),
+		);
+		expect(authDb(env).rows.get(otherTwo.payload.sid as string)?.revoked_at).toEqual(
+			expect.any(Number),
+		);
+		expect(statusResponse.status).toBe(200);
+	});
+
+	it("revokes an earlier same-device session when login creates a fresh one", async () => {
+		const env = createTestEnv();
+		const firstResponse = await fetchWorker(
+			"/api/auth/login",
+			loginRequestWithDevice(TEST_LOGIN_PASSWORD, {
+				deviceId: "stable-device-id",
+				name: "Pixel",
+			}),
+			env,
+		);
+		const firstBody = (await firstResponse.json()) as { accessToken: string };
+		const firstPayload = decodeTokenPayload(firstBody.accessToken);
+
+		const secondResponse = await fetchWorker(
+			"/api/auth/login",
+			loginRequestWithDevice(TEST_LOGIN_PASSWORD, {
+				deviceId: "stable-device-id",
+				name: "Pixel",
+			}),
+			env,
+		);
+		const secondBody = (await secondResponse.json()) as { accessToken: string };
+		const secondPayload = decodeTokenPayload(secondBody.accessToken);
+
+		expect(secondResponse.status).toBe(200);
+		expect(secondPayload.sid).not.toBe(firstPayload.sid);
+		expect(authDb(env).rows.get(firstPayload.sid as string)?.revoked_at).toEqual(
+			expect.any(Number),
+		);
+		expect(authDb(env).rows.get(secondPayload.sid as string)?.revoked_at).toBeNull();
+	});
+
+	it("rejects tokens when the backing session is missing, revoked, or expired", async () => {
+		const env = createTestEnv();
+		const missing = await createSessionBackedAccessToken(env, 1_788_393_600);
+		const revoked = await createSessionBackedAccessToken(env, 1_788_393_601);
+		const expired = await createSessionBackedAccessToken(env, 1_788_393_602);
+		const nowSeconds = 1_788_393_700;
+
+		authDb(env).rows.delete(missing.payload.sid as string);
+		authDb(env).rows.get(revoked.payload.sid as string)!.revoked_at =
+			nowSeconds - 1;
+		authDb(env).rows.get(expired.payload.sid as string)!.expires_at =
+			nowSeconds - 1;
+		vi.setSystemTime(new Date(nowSeconds * 1000));
+
+		for (const token of [missing.token, revoked.token, expired.token]) {
+			const response = await fetchWorker(
+				"/api/auth/status",
+				{
+					headers: authHeaders(token),
+				},
+				env,
+			);
+
+			expect(response.status).toBe(401);
+			expect(await response.json()).toEqual({
+				error: "Unauthorized",
+			});
+		}
+	});
+
+	it("fails closed when the session store is unavailable for protected routes", async () => {
+		const env = createTestEnv();
+		const token = await createSessionBackedAccessToken(env, 1_788_393_600);
+		const response = await fetchWorker(
+			"/api/auth/status",
+			{
+				headers: authHeaders(token.token),
+			},
+			createTestEnv({
+				AUTH_DB: {
+					prepare: () => {
+						throw new Error("D1 unavailable");
+					},
+				} as unknown as D1Database,
+			}),
+		);
+
+		expect(response.status).toBe(401);
+		expect(await response.json()).toEqual({
+			error: "Unauthorized",
+		});
+	});
+
+	it("does not renew a revoked session", async () => {
+		const env = createTestEnv();
+		const token = await createSessionBackedAccessToken(env, 1_788_393_600);
+
+		authDb(env).rows.get(token.payload.sid as string)!.revoked_at =
+			1_788_393_700;
+		vi.setSystemTime(new Date(1_788_396_900 * 1000));
+
+		const response = await fetchWorker(
+			"/api/auth/renew",
+			{
+				method: "POST",
+				headers: authHeaders(token.token),
+			},
+			env,
+		);
+
+		expect(response.status).toBe(401);
+		expect(await response.json()).toEqual({
+			error: "Unauthorized",
+		});
+	});
+
+	it("throttles last_seen_at writes while checking the session every request", async () => {
+		const env = createTestEnv();
+		const issuedAt = 1_788_393_600;
+		const token = await createSessionBackedAccessToken(env, issuedAt);
+		const sessionId = token.payload.sid as string;
+
+		vi.setSystemTime(new Date((issuedAt + 299) * 1000));
+		const firstResponse = await fetchWorker(
+			"/api/auth/status",
+			{
+				headers: authHeaders(token.token),
+			},
+			env,
+		);
+
+		expect(firstResponse.status).toBe(200);
+		expect(authDb(env).rows.get(sessionId)?.last_seen_at).toBe(issuedAt);
+
+		vi.setSystemTime(new Date((issuedAt + 301) * 1000));
+		const secondResponse = await fetchWorker(
+			"/api/auth/status",
+			{
+				headers: authHeaders(token.token),
+			},
+			env,
+		);
+
+		expect(secondResponse.status).toBe(200);
+		expect(authDb(env).rows.get(sessionId)?.last_seen_at).toBe(issuedAt + 301);
+		expect(
+			authDb(env).operations.filter((sql) => sql.includes("WHERE id = ?1")),
+		).toHaveLength(2);
+	});
+
 	it.each([
 		["missing authorization", {}],
 		["malformed bearer token", { Authorization: "Bearer malformed-token" }],
@@ -614,7 +1122,7 @@ describe("Authentication API", () => {
 	it("does not renew a token before the renewal window", async () => {
 		const env = createTestEnv();
 		const nowSeconds = 1_788_393_600;
-		const token = await createAccessToken(env, nowSeconds - 1800);
+		const token = await createSessionBackedAccessToken(env, nowSeconds - 1800);
 		vi.setSystemTime(new Date(nowSeconds * 1000));
 
 		const response = await fetchWorker(
@@ -648,7 +1156,7 @@ describe("Authentication API", () => {
 		const env = createTestEnv();
 		const issuedAt = 1_788_393_600;
 		const nowSeconds = issuedAt + elapsedSeconds;
-		const original = await createAccessToken(env, issuedAt);
+		const original = await createSessionBackedAccessToken(env, issuedAt);
 		vi.setSystemTime(new Date(nowSeconds * 1000));
 
 		const response = await fetchWorker(
@@ -690,7 +1198,7 @@ describe("Authentication API", () => {
 		const env = createTestEnv();
 		const issuedAt = 1_788_393_600;
 		const nowSeconds = issuedAt + 3300;
-		const original = await createAccessToken(env, issuedAt);
+		const original = await createSessionBackedAccessToken(env, issuedAt);
 		const fetchMock = stubEmptyNotionFetch();
 		vi.setSystemTime(new Date(nowSeconds * 1000));
 
@@ -733,7 +1241,7 @@ describe("Authentication API", () => {
 		const env = createTestEnv();
 		const sessionStartedAt = 1_788_393_600;
 		const nowSeconds = sessionStartedAt + 28_200;
-		const original = await createAccessToken(env, sessionStartedAt + 25_200, {
+		const original = await createSessionBackedAccessToken(env, sessionStartedAt + 25_200, {
 			sessionStartedAt,
 		});
 		vi.setSystemTime(new Date(nowSeconds * 1000));
@@ -763,9 +1271,13 @@ describe("Authentication API", () => {
 		const env = createTestEnv();
 		const sessionStartedAt = 1_788_393_600;
 		const nowSeconds = sessionStartedAt + 28_800;
+		const original = await createSessionBackedAccessToken(env, sessionStartedAt + 27_000, {
+			sessionStartedAt,
+		});
 		const token = await createCustomToken(env, {
 			nowSeconds: sessionStartedAt + 27_000,
 			payload: {
+				sid: original.payload.sid,
 				sessionStartedAt,
 				exp: nowSeconds + 300,
 			},
@@ -788,7 +1300,7 @@ describe("Authentication API", () => {
 		});
 	});
 
-	it("renews valid legacy tokens without sessionStartedAt by preserving the original iat", async () => {
+	it("rejects legacy tokens without sid so the user performs one fresh login", async () => {
 		const env = createTestEnv();
 		const issuedAt = 1_788_393_600;
 		const nowSeconds = issuedAt + 3300;
@@ -803,15 +1315,11 @@ describe("Authentication API", () => {
 			},
 			env,
 		);
-		const body = (await response.json()) as {
-			renewed: boolean;
-			accessToken: string;
-		};
-		const renewedPayload = decodeTokenPayload(body.accessToken);
 
-		expect(response.status).toBe(200);
-		expect(body.renewed).toBe(true);
-		expect(renewedPayload.sessionStartedAt).toBe(issuedAt);
+		expect(response.status).toBe(401);
+		expect(await response.json()).toEqual({
+			error: "Unauthorized",
+		});
 	});
 
 	it.each([

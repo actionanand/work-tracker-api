@@ -10,6 +10,7 @@ export interface AuthTokenPayload {
 	iat: number;
 	exp: number;
 	jti: string;
+	sid: string;
 	sessionStartedAt?: number;
 }
 
@@ -24,6 +25,51 @@ export interface AuthStatus {
 
 export interface LoginRequestBody {
 	password?: unknown;
+	device?: unknown;
+}
+
+export interface LoginDeviceMetadata {
+	deviceId?: string | null;
+	name?: string | null;
+	platform?: string | null;
+	model?: string | null;
+	appVersion?: string | null;
+}
+
+export interface AuthSessionRecord {
+	id: string;
+	subject: string;
+	deviceId: string | null;
+	deviceName: string | null;
+	platform: string | null;
+	deviceModel: string | null;
+	appVersion: string | null;
+	userAgent: string | null;
+	ipAddress: string | null;
+	country: string | null;
+	createdAt: number;
+	lastSeenAt: number;
+	expiresAt: number;
+	revokedAt: number | null;
+}
+
+export interface AuthSessionDevice {
+	deviceId: string | null;
+	name: string | null;
+	platform: string;
+	model: string | null;
+	appVersion: string | null;
+}
+
+export interface AuthSessionResponseItem {
+	id: string;
+	current: boolean;
+	device: AuthSessionDevice;
+	ipAddress: string | null;
+	country: string | null;
+	createdAt: string;
+	lastSeenAt: string;
+	expiresAt: string;
 }
 
 export interface RateLimitBinding {

@@ -53,6 +53,13 @@
 				"period": 60
 			}
 		}
+	],
+	"d1_databases": [
+		{
+			"binding": "AUTH_DB",
+			"database_name": "work-tracker-auth",
+			"database_id": "68b3c13b-e597-4a87-8afa-e1926c5d7849"
+		}
 	]
 	/**
 	 * Static Assets

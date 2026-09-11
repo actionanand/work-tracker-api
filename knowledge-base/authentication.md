@@ -25,9 +25,18 @@ Content-Type: application/json
 
 ```json
 {
-  "password": "your_work_tracker_password_here"
+  "password": "your_work_tracker_password_here",
+  "device": {
+    "deviceId": "optional-stable-installation-id",
+    "name": "Optional device name",
+    "platform": "android",
+    "model": "Optional model",
+    "appVersion": "Optional app version"
+  }
 }
 ```
+
+The `device` object is optional and is used only for display in the session/device list. It is not an authorization factor.
 
 Successful response:
 
@@ -107,7 +116,7 @@ POST /api/auth/renew
 Authorization: Bearer <currentAccessToken>
 ```
 
-Renewal is protected and requires a still-valid access token. It does not use the login rate limiter, does not call Notion, and does not use refresh tokens or server-side session storage.
+Renewal is protected and requires a still-valid access token with an active D1-backed server-side session. It does not use the login rate limiter, does not call Notion, and does not use refresh tokens.
 
 Policy:
 
@@ -152,11 +161,108 @@ After the absolute session lifetime is reached:
 }
 ```
 
-Expired access tokens cannot be renewed. Because the Worker remains stateless, the previous token is not revoked after renewal and may remain valid until its own `exp`.
+Expired access tokens cannot be renewed. The previous token is not deleted after renewal and may remain valid until its own `exp`, unless the backing D1 session is revoked or expires.
 
-JWT-compatible access tokens include `sessionStartedAt` as a NumericDate. Tokens issued before that claim existed can still renew while valid; the renewed token uses the legacy token's `iat` as `sessionStartedAt`.
+JWT-compatible access tokens include `sid` as the stable server-side session ID, `jti` as the per-token identifier, and `sessionStartedAt` as a NumericDate. The `sid` remains the same across renewals, while `jti` changes for each token and is not stored in D1.
+
+Tokens issued before `sid` existed are rejected with HTTP 401. The user needs one fresh password login to create a D1-backed session.
 
 PIN or biometric checks in Office Orbit are local app locking only. They cannot renew backend authentication without a valid Worker access token.
+
+## Active Sessions
+
+The Worker stores active session metadata in D1 through the `AUTH_DB` binding. The database stores only revocation/session metadata:
+
+- session ID
+- subject
+- optional display-only device metadata
+- request metadata such as user agent, IP address, and country
+- created, last-seen, expiry, and revoked timestamps
+
+It does not store JWTs, JWT IDs, passwords, password hashes, JWT signing secrets, or Notion tokens.
+
+Every protected `/api/*` request must pass both checks:
+
+- the bearer JWT verifies cryptographically
+- the matching D1 session exists for the token subject, is not revoked, and has not expired
+
+If D1 is unavailable, authentication fails closed with HTTP 401 for protected routes. Revoked, deleted, expired, malformed, or sid-less sessions also return the same generic HTTP 401 response.
+
+`last_seen_at` writes are throttled to avoid writing on every request. The active session row is still checked on every protected request.
+
+### Session Endpoints
+
+```http
+GET /api/auth/sessions
+Authorization: Bearer <accessToken>
+```
+
+Returns active sessions for the current subject only. Call this on demand, such as when opening a device-management screen; do not poll it in the background.
+
+```json
+{
+  "sessions": [
+    {
+      "id": "session-id",
+      "current": true,
+      "device": {
+        "deviceId": "optional-stable-installation-id",
+        "name": "Optional device name",
+        "platform": "android",
+        "model": "Optional model",
+        "appVersion": "Optional app version"
+      },
+      "ipAddress": "203.0.113.10",
+      "country": "IN",
+      "createdAt": "2026-09-03T11:00:00.000Z",
+      "lastSeenAt": "2026-09-03T11:10:00.000Z",
+      "expiresAt": "2026-09-03T19:00:00.000Z"
+    }
+  ]
+}
+```
+
+```http
+DELETE /api/auth/sessions/:sessionId
+Authorization: Bearer <accessToken>
+```
+
+Revokes the target session only when it belongs to the current subject. The operation is idempotent and may revoke the current session.
+
+```json
+{
+  "success": true,
+  "sessionId": "session-id",
+  "currentSession": false
+}
+```
+
+```http
+POST /api/auth/sessions/logout-others
+Authorization: Bearer <accessToken>
+```
+
+Revokes all active sessions for the current subject except the current session.
+
+```json
+{
+  "success": true,
+  "revokedCount": 2
+}
+```
+
+```http
+POST /api/auth/logout
+Authorization: Bearer <accessToken>
+```
+
+Revokes the current session.
+
+```json
+{
+  "success": true
+}
+```
 
 ## Configuration
 
@@ -213,6 +319,27 @@ npx wrangler secret put AUTH_JWT_SECRET
 ```
 
 Login requests are rate limited by the `AUTH_RATE_LIMITER` Cloudflare Rate Limit binding.
+
+Active session revocation requires a D1 binding:
+
+```jsonc
+"d1_databases": [
+  {
+    "binding": "AUTH_DB",
+    "database_name": "work-tracker-auth",
+    "database_id": "<database_id_from_wrangler_d1_create>"
+  }
+]
+```
+
+Create the database, apply the migration, and regenerate Worker types after the real `database_id` is in `wrangler.jsonc`:
+
+```bash
+npx wrangler d1 create work-tracker-auth
+npx wrangler d1 migrations apply work-tracker-auth --local
+npx wrangler d1 migrations apply work-tracker-auth --remote
+npx wrangler types
+```
 
 ## Local CLI Verification
 
@@ -346,7 +473,18 @@ curl -sS \
 
 Expected: `authenticated` is `true`, `subject` is `owner`, and `expiresAt` contains the expiry timestamp.
 
-### 8a. Check renewal without printing the JWT
+### 8a. List active sessions without printing secrets
+
+```bash
+curl -sS \
+  http://localhost:8787/api/auth/sessions \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq
+```
+
+Expected: a `sessions` array with the current session first. No JWT, `jti`, password, password hash, salt, JWT secret, or Notion token should appear in the response.
+
+### 8b. Check renewal without printing the JWT
 
 ```bash
 RENEW_RESPONSE=$(curl -sS \
@@ -557,10 +695,12 @@ AUTH_CONFIG_HASH_INVALID
 AUTH_CONFIG_SALT_MISSING
 AUTH_CONFIG_SALT_INVALID
 AUTH_CONFIG_JWT_SECRET_MISSING
+AUTH_CONFIG_SESSION_DB_MISSING
 AUTH_CONFIG_ITERATIONS_INVALID
 AUTH_CONFIG_TTL_INVALID
 AUTH_RATE_LIMIT_ERROR
 AUTH_PASSWORD_VERIFY_ERROR
+AUTH_SESSION_STORE_ERROR
 AUTH_TOKEN_SIGN_ERROR
 AUTH_UNEXPECTED_ERROR
 ```

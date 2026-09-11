@@ -45,6 +45,7 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 	if (url.pathname === "/api/auth/renew") {
 		const authenticatedForRenew = await authenticateRequest(request, env, {
 			enforceSessionLifetime: false,
+			allowExpiredSession: true,
 		});
 
 		if (authenticatedForRenew instanceof Response) {
