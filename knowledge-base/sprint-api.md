@@ -9,8 +9,9 @@ This document describes the Sprints and Sprint Allocations APIs currently implem
 | `GET` | `/api/sprints` | Query all sprints from the configured Notion Sprints data source. |
 | `GET` | `/api/sprints/active` | Query active sprints. |
 | `GET` | `/api/sprints/history` | Query inactive sprints, sorted by newest Start Date first. |
+| `GET` | `/api/sprints/:sprintId` | Query one Sprint by Notion page ID and include related JIRAs with Sprint Allocation planning data. |
 
-Unknown paths such as `/api/sprints/random` are not handled by `handleSprintRoutes()` and fall through to the main Worker 404.
+Static Sprint routes are matched before dynamic Sprint detail lookup. Malformed single-segment Sprint IDs such as `/api/sprints/random` return HTTP 400. Unknown deeper paths such as `/api/sprints/random/extra` are not handled by `handleSprintRoutes()` and fall through to the main Worker 404.
 
 ## Sprint Query Parameters
 
@@ -52,6 +53,8 @@ Company-based Sprint history is implemented through the Projects data source. If
 
 Sprint collection endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters or views change. Company-to-Project resolution for Sprint history continues to fetch all matching Projects internally before applying the public Sprint page.
 
+`GET /api/sprints/:sprintId` validates the path ID as a Notion page ID before any Notion request. It uses a direct Notion page lookup for the Sprint and returns HTTP 404 when the Sprint page is missing or inaccessible.
+
 ## Sprint Filters
 
 | Endpoint | Notion Filter Semantics |
@@ -88,6 +91,46 @@ allocationIds
 Formula and rollup numbers default to `0` when Notion values are missing or null. Date/select values default to `null`. Relation values are returned as raw Notion page IDs.
 
 When `include=relations` is supplied, Sprint endpoints also include shallow `projects` arrays. Raw `projectIds` remain unchanged.
+
+## Sprint Detail
+
+`GET /api/sprints/:sprintId` returns one Sprint detail object:
+
+```json
+{
+  "sprint": {
+    "id": "sprint-page-id",
+    "sprint": "Sprint 6",
+    "active": true,
+    "startDate": "2026-08-16",
+    "endDate": "2026-08-31",
+    "projects": []
+  },
+  "jiras": [
+    {
+      "id": "jira-page-id",
+      "jiraKey": "CRI-1234",
+      "status": "Blocked",
+      "plannedDays": 2.5,
+      "allocationId": "allocation-page-id",
+      "allocationNotes": "Carryover work",
+      "allocationConflict": false,
+      "allocationCount": 1
+    }
+  ],
+  "count": 1
+}
+```
+
+The detail endpoint queries:
+
+- the Sprint page directly from Notion
+- JIRAs whose `Sprints` relation contains the Sprint page ID
+- Sprint Allocations whose `Sprint` relation contains the Sprint page ID
+
+The JIRA list includes every status returned by Notion, including `Cancelled`, `Done`, `Blocked`, and unknown future status names. It is not filtered by active status. Sprint Allocation data is merged into each JIRA when present; missing allocations are represented as `plannedDays: null`, `allocationId: null`, `allocationNotes: ""`, `allocationConflict: false`, and `allocationCount: 0`.
+
+If more than one Sprint Allocation exists for the same Sprint and JIRA, the API surfaces the inconsistency on that JIRA instead of selecting one planned-days value. Duplicate allocations return `plannedDays: null`, `allocationId: null`, `allocationNotes: ""`, `allocationConflict: true`, and the duplicate row count in `allocationCount`.
 
 ## Sprint Allocation Endpoints
 
@@ -169,6 +212,10 @@ Current tests cover:
 - Sprint Active rollup mapping fallbacks
 - Sprint history filtering by Company through Projects
 - Company-to-Projects pagination during Sprint history resolution
+- Sprint detail direct page lookup
+- Sprint detail JIRA and Sprint Allocation relation filters
+- Sprint detail pagination for related JIRAs and allocations
+- Sprint detail allocation merge fallbacks
 - unknown subpath fallthrough behavior
 
 ## Related Docs

@@ -75,6 +75,12 @@ export const jiraFilters = {
 			contains: projectId,
 		},
 	}),
+	sprint: (sprintId: string): NotionQueryFilter => ({
+		property: "Sprints",
+		relation: {
+			contains: sprintId,
+		},
+	}),
 	projects: (projectIds: string[]): NotionQueryFilter | undefined => {
 		const filters = projectIds.map((projectId) => jiraFilters.project(projectId));
 

@@ -97,6 +97,58 @@ Relation IDs currently remain raw Notion page IDs:
 
 When `include=relations` is supplied, JIRA endpoints also include shallow `projects`, `sprints`, and `blockedBy` arrays. Raw relation ID arrays remain unchanged. `blockedBy` JIRAs are not recursively enriched.
 
+For `GET /api/jiras/:jiraKey?include=relations`, the detail response also includes Sprint planning history:
+
+```json
+{
+  "sprintHistory": [
+    {
+      "sprint": {
+        "id": "sprint-page-id",
+        "name": "Sprint 5",
+        "active": false,
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-15"
+      },
+      "allocationId": "allocation-page-id",
+      "plannedDays": 5,
+      "allocationNotes": "Initial allocation",
+      "allocationConflict": false,
+      "allocationCount": 1
+    }
+  ],
+  "spillEvents": [
+    {
+      "number": 1,
+      "fromSprint": {
+        "id": "sprint-page-id",
+        "name": "Sprint 5",
+        "active": false,
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-15"
+      },
+      "toSprint": {
+        "id": "next-sprint-page-id",
+        "name": "Sprint 6",
+        "active": true,
+        "startDate": "2026-08-16",
+        "endDate": "2026-08-31"
+      },
+      "reason": null
+    }
+  ],
+  "latestSpill": null
+}
+```
+
+Sprint references are sorted chronologically by Sprint Start Date, then End Date, then name and ID fallback. The API does not trust Notion relation order for Sprint history.
+
+`sprintHistory` is built by querying Sprint Allocations once for the JIRA relation and merging matching allocations by Sprint. JIRA list endpoints do not perform this allocation query. Missing allocations are returned as `plannedDays: null`, `allocationId: null`, `allocationNotes: ""`, `allocationConflict: false`, and `allocationCount: 0`.
+
+If more than one Sprint Allocation exists for the same JIRA and Sprint, the API does not choose one row as authoritative. The history item returns `plannedDays: null`, `allocationId: null`, `allocationNotes: ""`, `allocationConflict: true`, and the duplicate row count in `allocationCount`.
+
+`spillEvents` are derived from chronological Sprint transitions. `latestSpill` is the event whose number matches `spilloverCount`; if that event cannot be derived, it is `null`. Because the current Notion schema stores only one top-level `spilloverReason`, the reason is attached only to the matching latest spill event when available.
+
 ## Historical JIRA Goal
 
 Old JIRAs should remain queryable later by JIRA key. Sprint history should not be destroyed by removing historical relations just to simplify active sprint views.
@@ -121,6 +173,9 @@ Current tests cover:
 - filter payloads for each JIRA endpoint
 - lookup by JIRA Key
 - not-found and duplicate-key lookup behavior
+- enriched JIRA detail Sprint history and spill events
+- JIRA detail Sprint Allocation query pagination
+- no Sprint Allocation query for JIRA list routes
 - unknown JIRA path fallthrough behavior
 
 Do not hardcode current sample test records as assumptions about production data.

@@ -1,5 +1,5 @@
 import type { Env } from "../../shared/env";
-import { parseNotionIdParam } from "../../shared/notion/notion-id";
+import { normalizeNotionId, parseNotionIdParam } from "../../shared/notion/notion-id";
 import type {
 	NotionQueryFilter,
 	NotionQuerySort,
@@ -11,7 +11,7 @@ import {
 import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { listProjectIdsByCompany } from "../projects/project.service";
 import { combineSprintFilters, sprintFilters } from "./sprint.filters";
-import { listSprints } from "./sprint.service";
+import { SprintNotFoundError, getSprintById, listSprints } from "./sprint.service";
 
 interface SprintRouteConfig {
 	baseFilter?: NotionQueryFilter;
@@ -51,6 +51,8 @@ const emptySprintListResponse = {
 	hasMore: false,
 	nextCursor: null,
 };
+
+const reservedSprintRouteSegments = new Set(["active", "history"]);
 
 function parseDateParam(url: URL, name: "from" | "to"): string | Response | undefined {
 	const value = url.searchParams.get(name);
@@ -144,8 +146,12 @@ export async function handleSprintRoutes(
 ): Promise<Response | null> {
 	const config = sprintRouteConfigs.get(url.pathname);
 
-	if (request.method !== "GET" || !config) {
+	if (request.method !== "GET") {
 		return null;
+	}
+
+	if (!config) {
+		return handleSprintDetailRoute(url, env);
 	}
 
 	const pagination = parsePaginationParams(url);
@@ -187,6 +193,82 @@ export async function handleSprintRoutes(
 		return Response.json(
 			{
 				error: "Failed to retrieve Sprints",
+			},
+			{
+				status: 500,
+			},
+		);
+	}
+}
+
+function invalidSprintIdResponse(): Response {
+	return Response.json(
+		{
+			error: "Invalid query parameter",
+			parameter: "sprintId",
+			message: "Expected a valid Notion page ID",
+		},
+		{
+			status: 400,
+		},
+	);
+}
+
+function parseSprintIdPath(pathname: string): string | Response | null {
+	const match = pathname.match(/^\/api\/sprints\/([^/]+)$/);
+
+	if (!match) {
+		return null;
+	}
+
+	let segment: string;
+
+	try {
+		segment = decodeURIComponent(match[1]).trim();
+	} catch {
+		return invalidSprintIdResponse();
+	}
+
+	if (reservedSprintRouteSegments.has(segment)) {
+		return null;
+	}
+
+	return normalizeNotionId(segment) ?? invalidSprintIdResponse();
+}
+
+async function handleSprintDetailRoute(
+	url: URL,
+	env: Env,
+): Promise<Response | null> {
+	const sprintId = parseSprintIdPath(url.pathname);
+
+	if (!sprintId) {
+		return null;
+	}
+
+	if (sprintId instanceof Response) {
+		return sprintId;
+	}
+
+	try {
+		return Response.json(await getSprintById(env, sprintId));
+	} catch (error) {
+		if (error instanceof SprintNotFoundError) {
+			return Response.json(
+				{
+					error: "Sprint not found",
+				},
+				{
+					status: 404,
+				},
+			);
+		}
+
+		console.error(error);
+
+		return Response.json(
+			{
+				error: "Failed to retrieve Sprint",
 			},
 			{
 				status: 500,

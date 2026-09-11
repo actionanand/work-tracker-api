@@ -93,6 +93,9 @@ export async function loadSprintCatalog(env: Env): Promise<Map<string, SprintRef
 			return {
 				id: sprint.id,
 				name: sprint.sprint.trim(),
+				active: sprint.active,
+				startDate: sprint.startDate,
+				endDate: sprint.endDate,
 			};
 		}),
 	);

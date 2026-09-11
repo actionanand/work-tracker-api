@@ -26,6 +26,11 @@ export interface QueryDataSourceOptions {
 	pageSize?: number;
 }
 
+export interface GetNotionPageOptions {
+	pageId: string;
+	env: Env;
+}
+
 export class NotionQueryError extends Error {
 	constructor(
 		readonly status: number,
@@ -72,6 +77,28 @@ export async function queryNotionDataSource<TPage = unknown>({
 			body: JSON.stringify(body),
 		},
 	);
+
+	if (!response.ok) {
+		const error = await response.text();
+
+		throw new NotionQueryError(response.status, error);
+	}
+
+	return response.json();
+}
+
+export async function getNotionPage<TPage = unknown>({
+	pageId,
+	env,
+}: GetNotionPageOptions): Promise<TPage> {
+	const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+		method: "GET",
+		headers: {
+			Authorization: `Bearer ${env.NOTION_TOKEN}`,
+			"Notion-Version": NOTION_VERSION,
+			"Content-Type": "application/json",
+		},
+	});
 
 	if (!response.ok) {
 		const error = await response.text();

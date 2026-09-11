@@ -290,6 +290,159 @@ function expectJiraKeyLookupBody(fetchMock: ReturnType<typeof vi.fn>, jiraKey: s
 	);
 }
 
+const sprint5Id = "55555555-5555-5555-5555-555555555555";
+const sprint6Id = "66666666-6666-6666-6666-666666666666";
+const sprint7Id = "77777777-7777-7777-7777-777777777777";
+const sprint8Id = "88888888-8888-8888-8888-888888888888";
+
+function notionSprintPage(
+	id: string,
+	name: string,
+	startDate: string | null,
+	endDate: string | null,
+	active = false,
+) {
+	return {
+		id,
+		properties: {
+			Sprint: { title: [{ plain_text: name }] },
+			Active: { checkbox: active },
+			"Start Date": startDate ? { date: { start: startDate } } : { date: null },
+			"End Date": endDate ? { date: { start: endDate } } : { date: null },
+			Project: { relation: [] },
+		},
+	};
+}
+
+function notionAllocationPage(
+	id: string,
+	allocation: string,
+	sprintId: string,
+	jiraId: string,
+	plannedDays: number,
+	notes = "",
+) {
+	return {
+		id,
+		properties: {
+			Allocation: { title: [{ plain_text: allocation }] },
+			Sprint: { relation: [{ id: sprintId }] },
+			JIRA: { relation: [{ id: jiraId }] },
+			"Planned Days": { number: plannedDays },
+			Notes: { rich_text: [{ plain_text: notes }] },
+			"Sprint Active": {
+				rollup: {
+					array: [{ formula: { boolean: false } }],
+				},
+			},
+		},
+	};
+}
+
+function notionResponse(results: unknown[], nextCursor: string | null = null) {
+	return Response.json({
+		results,
+		has_more: nextCursor !== null,
+		next_cursor: nextCursor,
+	});
+}
+
+function postedBodies(fetchMock: ReturnType<typeof vi.fn>, dataSourceId: string) {
+	return fetchMock.mock.calls
+		.filter(([url]) => String(url).includes(`/data_sources/${dataSourceId}/query`))
+		.map(([, init]) => JSON.parse(String(init.body)));
+}
+
+function stubJiraDetailFetch(options: {
+	jiraPage?: unknown;
+	allocations?: unknown[];
+	allocationNextPage?: unknown[];
+}) {
+	const jiraDetailPage =
+		options.jiraPage ??
+		({
+			...notionJiraPage,
+			id: "99999999-9999-9999-9999-999999999999",
+			properties: {
+				...notionJiraPage.properties,
+				"JIRA Key": { title: [{ plain_text: "LSC-84944" }] },
+				Status: { status: { name: "Cancelled" } },
+				Spillover: { formula: { boolean: true } },
+				"Spillover Count": { formula: { number: 2 } },
+				"Spillover Reason": {
+					rich_text: [{ plain_text: "Second spill reason" }],
+				},
+				Sprints: {
+					relation: [
+						{ id: sprint7Id },
+						{ id: sprint5Id },
+						{ id: sprint6Id },
+					],
+				},
+			},
+		} as unknown);
+	const allocations =
+		options.allocations ??
+		[
+			notionAllocationPage(
+				"allocation-sprint-5",
+				"Sprint 5 allocation",
+				sprint5Id,
+				"99999999-9999-9999-9999-999999999999",
+				10,
+				"Initial plan",
+			),
+			notionAllocationPage(
+				"allocation-sprint-6",
+				"Sprint 6 allocation",
+				sprint6Id,
+				"99999999-9999-9999-9999-999999999999",
+				0,
+			),
+		];
+	const allocationNextPage = options.allocationNextPage ?? [];
+	const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+		const body = init?.body ? JSON.parse(String(init.body)) : {};
+
+		if (url.includes(testEnv.JIRAS_DATA_SOURCE_ID)) {
+			if (body.filter?.title) {
+				return Promise.resolve(notionResponse([jiraDetailPage]));
+			}
+
+			return Promise.resolve(notionResponse([]));
+		}
+
+		if (url.includes(testEnv.SPRINTS_DATA_SOURCE_ID)) {
+			return Promise.resolve(
+				notionResponse([
+					notionSprintPage(sprint6Id, "Sprint - 26.3 - Sprint 6", "2026-09-02", "2026-09-15", true),
+					notionSprintPage(sprint5Id, "Sprint - 26.3 - Sprint 5", "2026-08-19", "2026-09-01"),
+					notionSprintPage(sprint7Id, "Sprint - 26.3 - Sprint 7", "2026-09-16", "2026-09-29"),
+					notionSprintPage(sprint8Id, "Sprint - 26.3 - Sprint 8", null, null),
+				]),
+			);
+		}
+
+		if (url.includes(testEnv.PROJECTS_DATA_SOURCE_ID)) {
+			return Promise.resolve(notionResponse([]));
+		}
+
+		if (url.includes(testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)) {
+			return Promise.resolve(
+				body.start_cursor
+					? notionResponse(allocationNextPage)
+					: notionResponse(allocations, allocationNextPage.length ? "next-allocation" : null),
+			);
+		}
+
+		return Promise.resolve(notionResponse([]));
+	});
+
+	vi.stubGlobal("fetch", fetchMock);
+
+	return fetchMock;
+}
+
 describe("Work Tracker API worker", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -429,6 +582,229 @@ describe("Work Tracker API worker", () => {
 		});
 
 		consoleError.mockRestore();
+	});
+
+	it("adds chronological sprint history and spill events to JIRA detail with relations", async () => {
+		const fetchMock = stubJiraDetailFetch({});
+
+		const response = await fetchWorker("/api/jiras/LSC-84944?include=relations");
+		const body = (await response.json()) as Record<string, any>;
+
+		expect(response.status).toBe(200);
+		expect(body.status).toBe("Cancelled");
+		expect(body.spilloverReason).toBe("Second spill reason");
+		expect(body.sprints.map((sprint: { id: string }) => sprint.id)).toEqual([
+			sprint5Id,
+			sprint6Id,
+			sprint7Id,
+		]);
+		expect(body.sprints[1]).toEqual(
+			expect.objectContaining({
+				id: sprint6Id,
+				active: true,
+				startDate: "2026-09-02",
+				endDate: "2026-09-15",
+			}),
+		);
+		expect(body.sprintHistory).toMatchObject([
+			{
+				sprint: { id: sprint5Id },
+				allocationId: "allocation-sprint-5",
+				plannedDays: 10,
+				allocationNotes: "Initial plan",
+				allocationConflict: false,
+				allocationCount: 1,
+			},
+			{
+				sprint: { id: sprint6Id },
+				allocationId: "allocation-sprint-6",
+				plannedDays: 0,
+				allocationNotes: "",
+				allocationConflict: false,
+				allocationCount: 1,
+			},
+			{
+				sprint: { id: sprint7Id },
+				allocationId: null,
+				plannedDays: null,
+				allocationNotes: "",
+				allocationConflict: false,
+				allocationCount: 0,
+			},
+		]);
+		expect(body.spillEvents).toMatchObject([
+			{
+				number: 1,
+				fromSprint: { id: sprint5Id },
+				toSprint: { id: sprint6Id },
+				reason: null,
+			},
+			{
+				number: 2,
+				fromSprint: { id: sprint6Id },
+				toSprint: { id: sprint7Id },
+				reason: "Second spill reason",
+			},
+		]);
+		expect(body.latestSpill).toMatchObject({
+			number: 2,
+			fromSprint: { id: sprint6Id },
+			toSprint: { id: sprint7Id },
+			reason: "Second spill reason",
+		});
+		expect(postedBodies(fetchMock, testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)).toEqual([
+			{
+				page_size: 100,
+				filter: {
+					property: "JIRA",
+					relation: {
+						contains: "99999999-9999-9999-9999-999999999999",
+					},
+				},
+			},
+		]);
+	});
+
+	it("does not invent a latest spill when spillover count exceeds available transitions", async () => {
+		const fetchMock = stubJiraDetailFetch({
+			jiraPage: {
+				...notionJiraPage,
+				id: "99999999-9999-9999-9999-999999999999",
+				properties: {
+					...notionJiraPage.properties,
+					"JIRA Key": { title: [{ plain_text: "LSC-84944" }] },
+					Spillover: { formula: { boolean: true } },
+					"Spillover Count": { formula: { number: 3 } },
+					"Spillover Reason": { rich_text: [{ plain_text: "No transition" }] },
+					Sprints: { relation: [{ id: sprint5Id }, { id: sprint6Id }] },
+				},
+			},
+		});
+
+		const response = await fetchWorker("/api/jiras/LSC-84944?include=relations");
+		const body = (await response.json()) as Record<string, any>;
+
+		expect(response.status).toBe(200);
+		expect(body.spillEvents).toHaveLength(1);
+		expect(body.spillEvents[0].reason).toBeNull();
+		expect(body.latestSpill).toBeNull();
+		expect(postedBodies(fetchMock, testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("fetches all Sprint Allocations for JIRA detail without one request per Sprint", async () => {
+		const fetchMock = stubJiraDetailFetch({
+			allocations: [
+				notionAllocationPage(
+					"allocation-sprint-5",
+					"Sprint 5 allocation",
+					sprint5Id,
+					"99999999-9999-9999-9999-999999999999",
+					10,
+				),
+			],
+			allocationNextPage: [
+				notionAllocationPage(
+					"allocation-sprint-7",
+					"Sprint 7 allocation",
+					sprint7Id,
+					"99999999-9999-9999-9999-999999999999",
+					2.5,
+				),
+			],
+		});
+
+		const response = await fetchWorker("/api/jiras/LSC-84944?include=relations");
+		const body = (await response.json()) as Record<string, any>;
+		const allocationBodies = postedBodies(
+			fetchMock,
+			testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID,
+		);
+
+		expect(response.status).toBe(200);
+		expect(body.sprintHistory).toMatchObject([
+			{ sprint: { id: sprint5Id }, plannedDays: 10 },
+			{ sprint: { id: sprint6Id }, plannedDays: null },
+			{ sprint: { id: sprint7Id }, plannedDays: 2.5 },
+		]);
+		expect(allocationBodies).toHaveLength(2);
+		expect(allocationBodies[1]).toMatchObject({
+			start_cursor: "next-allocation",
+		});
+	});
+
+	it("marks duplicate Sprint Allocations on JIRA detail without choosing planned days", async () => {
+		const fetchMock = stubJiraDetailFetch({
+			allocations: [
+				notionAllocationPage(
+					"allocation-sprint-5-a",
+					"Sprint 5 allocation A",
+					sprint5Id,
+					"99999999-9999-9999-9999-999999999999",
+					10,
+					"First duplicate",
+				),
+				notionAllocationPage(
+					"allocation-sprint-5-b",
+					"Sprint 5 allocation B",
+					sprint5Id,
+					"99999999-9999-9999-9999-999999999999",
+					3,
+					"Second duplicate",
+				),
+				notionAllocationPage(
+					"allocation-sprint-6",
+					"Sprint 6 allocation",
+					sprint6Id,
+					"99999999-9999-9999-9999-999999999999",
+					0,
+				),
+			],
+		});
+
+		const response = await fetchWorker("/api/jiras/LSC-84944?include=relations");
+		const body = (await response.json()) as Record<string, any>;
+
+		expect(response.status).toBe(200);
+		expect(body.sprintHistory).toMatchObject([
+			{
+				sprint: { id: sprint5Id },
+				allocationId: null,
+				plannedDays: null,
+				allocationNotes: "",
+				allocationConflict: true,
+				allocationCount: 2,
+			},
+			{
+				sprint: { id: sprint6Id },
+				allocationId: "allocation-sprint-6",
+				plannedDays: 0,
+				allocationConflict: false,
+				allocationCount: 1,
+			},
+			{
+				sprint: { id: sprint7Id },
+				allocationId: null,
+				plannedDays: null,
+				allocationConflict: false,
+				allocationCount: 0,
+			},
+		]);
+		expect(postedBodies(fetchMock, testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)).toHaveLength(
+			1,
+		);
+	});
+
+	it("does not query Sprint Allocations for existing JIRA list routes", async () => {
+		const fetchMock = stubJiraDetailFetch({});
+
+		const response = await fetchWorker("/api/jiras/active?include=relations");
+
+		expect(response.status).toBe(200);
+		expect(postedBodies(fetchMock, testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)).toHaveLength(
+			0,
+		);
 	});
 
 	it("lets unknown JIRA subpaths fall through to the main Worker 404", async () => {
