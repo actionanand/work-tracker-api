@@ -74,6 +74,7 @@ src/
     ├── jiras/
     │   ├── jira.mapper.ts
     │   ├── jira.filters.ts
+    │   ├── jira.history.ts
     │   ├── jira.service.ts
     │   └── jira.routes.ts
     ├── sprints/
@@ -140,6 +141,7 @@ Layer responsibilities:
 | `src/features/jiras/jira.routes.ts` | JIRA HTTP route selection and route-to-filter mapping. |
 | `src/features/jiras/jira.service.ts` | JIRA query orchestration through the shared Notion client and mapper. |
 | `src/features/jiras/jira.filters.ts` | Reusable Notion-side JIRA filter definitions. |
+| `src/features/jiras/jira.history.ts` | JIRA Sprint history, allocation, and spill event detail shaping. |
 | `src/features/jiras/jira.mapper.ts` | Raw Notion page to clean JIRA API model mapping. |
 | `src/features/sprints/*` | Sprint routes, filters, service orchestration, and mapping. |
 | `src/features/sprint-allocations/*` | Sprint Allocation routes, filters, service orchestration, and mapping. |
@@ -175,6 +177,7 @@ Layer responsibilities:
 | `GET` | `/api/sprints` | All Sprints from the configured Notion data source. |
 | `GET` | `/api/sprints/active` | Active Sprints. |
 | `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
+| `GET` | `/api/sprints/:sprintId` | Single Sprint detail with all related JIRAs and Sprint Allocation planning data. |
 | `GET` | `/api/sprint-allocations` | All Sprint Allocations from the configured Notion data source. |
 | `GET` | `/api/sprint-allocations/current` | Sprint Allocations whose related Sprint is active. |
 | `GET` | `/api/companies` | All Companies from the configured Notion data source. |
@@ -229,7 +232,7 @@ Collection responses keep this shape:
 
 `count` is the number of records returned in the current page, not the total number of matching rows. The API does not provide `totalCount` and does not fetch all Notion pages just to calculate one. Clients should discard cursors whenever filters, sort order, tab/view, or page size changes.
 
-`GET /api/dashboard` is an aggregate endpoint and is not publicly paginated. `GET /api/jiras/:jiraKey` returns one object and is not paginated.
+`GET /api/dashboard` is an aggregate endpoint and is not publicly paginated. `GET /api/jiras/:jiraKey` and `GET /api/sprints/:sprintId` return detail objects and are not paginated.
 
 Root response:
 

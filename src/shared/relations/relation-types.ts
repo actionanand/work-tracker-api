@@ -16,6 +16,9 @@ export interface ProjectRef {
 export interface SprintRef {
 	id: string;
 	name: string;
+	active: boolean;
+	startDate: string | null;
+	endDate: string | null;
 }
 
 export interface JiraRef {

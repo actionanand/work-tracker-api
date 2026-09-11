@@ -1,6 +1,9 @@
 import type { Env } from "../../shared/env";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
-import { queryNotionDataSource } from "../../shared/notion/notion-client";
+import {
+	queryAllNotionDataSourcePages,
+	queryNotionDataSource,
+} from "../../shared/notion/notion-client";
 import type { PaginationParams } from "../../shared/pagination/pagination";
 import {
 	mapSprintAllocation,
@@ -36,4 +39,17 @@ export async function listSprintAllocations(
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};
+}
+
+export async function listAllSprintAllocations(
+	env: Env,
+	filter?: NotionQueryFilter,
+): Promise<SprintAllocation[]> {
+	const pages = await queryAllNotionDataSourcePages<NotionSprintAllocationPage>({
+		dataSourceId: env.SPRINT_ALLOCATIONS_DATA_SOURCE_ID,
+		env,
+		filter,
+	});
+
+	return pages.map(mapSprintAllocation);
 }

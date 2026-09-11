@@ -51,7 +51,13 @@ const blockedById = "66666666-6666-6666-6666-666666666666";
 const companyRef = { id: companyId, name: "Clarivate" };
 const teamRef = { id: teamId, name: "Jupiter" };
 const projectRef = { id: projectId, name: "Work Tracker" };
-const sprintRef = { id: sprintId, name: "Sprint 42" };
+const sprintRef = {
+	id: sprintId,
+	name: "Sprint 42",
+	active: true,
+	startDate: "2026-09-01",
+	endDate: "2026-09-15",
+};
 const jiraRef = { id: jiraId, key: "CRI-1234", summary: "Build API" };
 const blockedByRef = { id: blockedById, key: "CRI-1000", summary: "Blocked task" };
 
@@ -94,6 +100,9 @@ function sprintPage() {
 		id: sprintId,
 		properties: {
 			Sprint: { title: [{ plain_text: "Sprint 42" }] },
+			Active: { checkbox: true },
+			"Start Date": { date: { start: "2026-09-01" } },
+			"End Date": { date: { start: "2026-09-15" } },
 			Project: { relation: [{ id: projectId }] },
 		},
 	};

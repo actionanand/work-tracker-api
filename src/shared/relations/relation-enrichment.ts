@@ -60,6 +60,19 @@ function resolveRefs<TRef>(
 	});
 }
 
+function compareSprintRefs(a: SprintRef, b: SprintRef): number {
+	return (
+		(a.startDate ?? "9999-12-31").localeCompare(b.startDate ?? "9999-12-31") ||
+		(a.endDate ?? "9999-12-31").localeCompare(b.endDate ?? "9999-12-31") ||
+		a.name.localeCompare(b.name) ||
+		a.id.localeCompare(b.id)
+	);
+}
+
+export function sortSprintRefs(sprints: SprintRef[]): SprintRef[] {
+	return [...sprints].sort(compareSprintRefs);
+}
+
 async function loadCatalogIfNeeded<TRef>(
 	ids: string[],
 	loader: () => Promise<Map<string, TRef>>,
@@ -129,7 +142,7 @@ export async function enrichJiras(
 	return jiras.map((jira) => ({
 		...jira,
 		projects: resolveRefs(jira.projectIds, projects),
-		sprints: resolveRefs(jira.sprintIds, sprints),
+		sprints: sortSprintRefs(resolveRefs(jira.sprintIds, sprints)),
 		blockedBy: resolveRefs(jira.blockedByIds, blockedBy),
 	}));
 }

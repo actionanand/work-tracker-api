@@ -11,6 +11,13 @@ import {
 	type IncludeRelationsOption,
 } from "../../shared/relations/relation-enrichment";
 import type { PaginationParams } from "../../shared/pagination/pagination";
+import { sprintAllocationFilters } from "../sprint-allocations/sprint-allocation.filters";
+import { listAllSprintAllocations } from "../sprint-allocations/sprint-allocation.service";
+import {
+	buildSprintHistory,
+	deriveSpillEvents,
+	type JiraDetail,
+} from "./jira.history";
 import { jiraFilters } from "./jira.filters";
 import { mapJira, type Jira, type NotionJiraPage } from "./jira.mapper";
 
@@ -59,11 +66,32 @@ export async function listJiras(
 	};
 }
 
+async function enrichJiraDetail(env: Env, jira: Jira): Promise<JiraDetail> {
+	const [enriched, allocations] = await Promise.all([
+		enrichJira(env, jira),
+		listAllSprintAllocations(env, sprintAllocationFilters.jira(jira.id)),
+	]);
+	const sprintHistory = buildSprintHistory(enriched.sprints, allocations);
+	const spillEvents = deriveSpillEvents(
+		sprintHistory,
+		jira.spilloverCount,
+		jira.spilloverReason,
+	);
+
+	return {
+		...enriched,
+		sprintHistory,
+		spillEvents,
+		latestSpill:
+			spillEvents.find((event) => event.number === jira.spilloverCount) ?? null,
+	};
+}
+
 export async function getJiraByKey(
 	env: Env,
 	jiraKey: string,
 	options: IncludeRelationsOption = {},
-): Promise<Jira | EnrichedJira> {
+): Promise<Jira | EnrichedJira | JiraDetail> {
 	const result = await listJiras(env, jiraFilters.byKey(jiraKey));
 
 	if (result.data.length === 0) {
@@ -75,8 +103,21 @@ export async function getJiraByKey(
 	}
 
 	return options.includeRelations
-		? enrichJira(env, result.data[0])
+		? enrichJiraDetail(env, result.data[0] as Jira)
 		: result.data[0];
+}
+
+export async function listAllJiras(
+	env: Env,
+	filter?: NotionQueryFilter,
+): Promise<Jira[]> {
+	const pages = await queryAllNotionDataSourcePages<NotionJiraPage>({
+		dataSourceId: env.JIRAS_DATA_SOURCE_ID,
+		env,
+		filter,
+	});
+
+	return pages.map(mapJira);
 }
 
 export async function listJiraIdsByProjects(

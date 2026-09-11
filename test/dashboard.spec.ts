@@ -195,6 +195,12 @@ const sprintPage = {
 		Active: { checkbox: true },
 		"Start Date": { date: { start: "2026-09-01" } },
 		"End Date": { date: { start: "2026-09-14" } },
+		"Planned Leave Days": { number: 1 },
+		"Holiday Days": { number: 2 },
+		"Capacity Days": { formula: { number: 10 } },
+		"Available Days": { formula: { number: 7 } },
+		"Allocated Days": { rollup: { number: 5 } },
+		"Remaining Days": { formula: { number: 2 } },
 		Project: { relation: [{ id: projectId }] },
 	},
 };
@@ -612,6 +618,14 @@ describe("Dashboard API routes", () => {
 		expect(body.generatedAt).toEqual(expect.any(String));
 		expect(body.company).toBeNull();
 		expect(body.project).toBeNull();
+		expect(body.currentSprint).toMatchObject({
+			plannedLeaveDays: 1,
+			holidayDays: 2,
+			capacityDays: 10,
+			availableDays: 7,
+			allocatedDays: 5,
+			remainingDays: 2,
+		});
 		expect(body.currentSprint.projects).toEqual([{ id: projectId, name: "Core API" }]);
 		expect(body.jiraSummary).toEqual({
 			active: 4,
