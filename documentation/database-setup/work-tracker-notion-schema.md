@@ -391,6 +391,7 @@ Recommended:
 - `In progress`
 - `Blocked`
 - `Done`
+- `Cancelled`
 
 ## Spillover formula
 
