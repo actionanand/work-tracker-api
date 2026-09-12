@@ -40,7 +40,10 @@ function buildQueryFilter(
 	config: SprintAllocationRouteConfig,
 ): NotionQueryFilter | Response | undefined {
 	if (!config.supportsQueryFilters) {
-		return config.baseFilter;
+		return combineSprintAllocationFilters([
+			sprintAllocationFilters.validForList as NotionQueryFilter,
+			config.baseFilter,
+		]);
 	}
 
 	const sprintId = parseNotionIdParam(url, "sprintId");
@@ -56,6 +59,7 @@ function buildQueryFilter(
 	}
 
 	return combineSprintAllocationFilters([
+		sprintAllocationFilters.validForList as NotionQueryFilter,
 		config.baseFilter,
 		sprintId ? sprintAllocationFilters.sprint(sprintId) : undefined,
 		jiraId ? sprintAllocationFilters.jira(jiraId) : undefined,

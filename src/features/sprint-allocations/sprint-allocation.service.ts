@@ -18,6 +18,10 @@ export interface SprintAllocationListResponse {
 	nextCursor: string | null;
 }
 
+function isValidSprintAllocationForList(allocation: SprintAllocation): boolean {
+	return allocation.jiraIds.length > 0 && allocation.sprintIds.length > 0;
+}
+
 export async function listSprintAllocations(
 	env: Env,
 	filter?: NotionQueryFilter,
@@ -31,7 +35,9 @@ export async function listSprintAllocations(
 		startCursor: options.pagination?.cursor,
 	});
 
-	const data = notion.results.map(mapSprintAllocation);
+	const data = notion.results
+		.map(mapSprintAllocation)
+		.filter(isValidSprintAllocationForList);
 
 	return {
 		data,

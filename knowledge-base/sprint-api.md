@@ -166,6 +166,15 @@ Sprint Active = true
 
 `Sprint Active` is a Notion rollup of `Sprint.Active`. The mapper is defensive and treats empty or null rollups as `false`. It supports array rollup items containing checkbox values and direct checkbox rollup values.
 
+User-facing Sprint Allocation list endpoints also require both relation properties to be populated:
+
+```text
+JIRA is not empty
+Sprint is not empty
+```
+
+Incomplete or orphan Sprint Allocation rows are excluded from `data`, and `count` reflects the returned valid records. `Planned Days = 0` remains valid when both relations are present.
+
 Live inspection of the actual project data was attempted, but the local token available to this environment was not valid for the Notion API. The implemented filter follows the Notion rollup `any` checkbox representation requested for this data source.
 
 ## Mapped Sprint Allocation Fields
@@ -209,6 +218,8 @@ Current tests cover:
 - Sprint Allocation route request bodies and data source IDs
 - Sprint Allocation current/sprint/JIRA filters
 - combined Sprint Allocation relation filters
+- Sprint Allocation list validity filters for populated JIRA and Sprint relations
+- exclusion of orphan allocations without hiding valid zero planned days
 - Sprint Active rollup mapping fallbacks
 - Sprint history filtering by Company through Projects
 - Company-to-Projects pagination during Sprint history resolution
