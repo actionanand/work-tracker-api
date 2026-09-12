@@ -90,6 +90,7 @@ GET /v1/data_sources/{data_source_id}
 ```
 
 Metadata endpoints normalize writable fields and select option IDs for clients. Write endpoints validate submitted option IDs against the current schema before creating or updating pages.
+Status, select, and multi-select option IDs are all validated against live schema metadata before writes. Status properties are written with Notion `status` payloads, not `select` payloads.
 
 ## Page Writes
 
@@ -101,6 +102,30 @@ PATCH /v1/pages/{page_id}
 ```
 
 The Worker builds Notion page properties from allow-listed API fields. It does not forward arbitrary client JSON. `PATCH` first retrieves the target page and verifies that it belongs to the expected data source before sending an update.
+
+Delete endpoints use Notion page trashing:
+
+```http
+PATCH /v1/pages/{page_id}
+```
+
+with `in_trash: true`. The Worker validates page ownership before trashing pages.
+
+## Markdown Page Content
+
+Memo detail and Reference Library detail endpoints read page-body markdown through Notion's markdown page APIs. Memo writes can update page-body markdown separately from the Memo data-source properties.
+
+Reference Library imports create normal child pages under `REFERENCE_LIBRARY_PAGE_ID` using markdown text, not Notion file attachments. When Notion returns an async task for markdown creation, the Worker exposes a normalized polling endpoint.
+
+## Block Children
+
+Reference Library listing uses:
+
+```http
+GET /v1/blocks/{block_id}/children
+```
+
+Only direct `child_page` blocks are returned by the API. Detail reads verify that the requested page's parent is the configured Reference Library page before returning markdown.
 
 ## Relation Properties
 
@@ -137,11 +162,15 @@ List endpoints support `pageSize` and `cursor` parameters. `pageSize` defaults t
 
 ## CORS And QUERY
 
-Preflight responses include `QUERY` in `Access-Control-Allow-Methods`. Resources that support HTTP QUERY return `Accept-Query: application/json`.
+Preflight responses include `QUERY` in `Access-Control-Allow-Methods`. Resources that support HTTP QUERY return `Accept-Query: application/json`; metadata endpoints and Reference Library endpoints do not.
 
 ## Related Docs
 
 - [JIRA API](jira-api.md)
 - [HTTP QUERY Method](http-query-method.md)
+- [To Do API](todo-api.md)
+- [Task API](task-api.md)
+- [Memo API](memo-api.md)
+- [Reference Library API](reference-library-api.md)
 - [Environment Variables and Secrets](../documentation/03-environment-variables-and-secrets.md)
 - [Security](../documentation/07-security.md)

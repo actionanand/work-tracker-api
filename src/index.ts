@@ -10,10 +10,14 @@ import { handleProjectRoutes } from "./features/projects/project.routes";
 import { handleReleaseRoutes } from "./features/releases/release.routes";
 import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
 import { handleSprintRoutes } from "./features/sprints/sprint.routes";
+import { handleTaskRoutes } from "./features/tasks/task.routes";
 import { handleTeamRoutes } from "./features/teams/team.routes";
+import { handleTodoRoutes } from "./features/todos/todo.routes";
 import { handleWorkLinkRoutes } from "./features/work-links/work-link.routes";
 import { handleWorkLogRoutes } from "./features/work-logs/work-log.routes";
 import { handleJiraRoutes } from "./features/jiras/jira.routes";
+import { handleMemoRoutes } from "./features/memos/memo.routes";
+import { handleReferenceLibraryRoutes } from "./features/reference-library/reference-library.routes";
 import { authenticateRequest } from "./shared/auth/auth.middleware";
 import {
 	corsPreflightResponse,
@@ -142,6 +146,30 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 
 	if (workLogResponse) {
 		return workLogResponse;
+	}
+
+	const todoResponse = await handleTodoRoutes(request, url, env);
+
+	if (todoResponse) {
+		return todoResponse;
+	}
+
+	const taskResponse = await handleTaskRoutes(request, url, env);
+
+	if (taskResponse) {
+		return taskResponse;
+	}
+
+	const memoResponse = await handleMemoRoutes(request, url, env);
+
+	if (memoResponse) {
+		return memoResponse;
+	}
+
+	const referenceLibraryResponse = await handleReferenceLibraryRoutes(request, url, env);
+
+	if (referenceLibraryResponse) {
+		return referenceLibraryResponse;
 	}
 
 	const releaseResponse = await handleReleaseRoutes(request, url, env);

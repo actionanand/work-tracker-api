@@ -26,4 +26,9 @@ export interface Env {
 	FEEDBACK_DATA_SOURCE_ID: string;
 
 	WORK_LINKS_DATA_SOURCE_ID: string;
+
+	TODOS_DATA_SOURCE_ID: string;
+	TASKS_DATA_SOURCE_ID: string;
+	MEMOS_DATA_SOURCE_ID: string;
+	REFERENCE_LIBRARY_PAGE_ID: string;
 }

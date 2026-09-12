@@ -38,6 +38,10 @@ const testEnv: Env = {
 	RELEASE_ITEMS_DATA_SOURCE_ID: "test-release-items-data-source-id",
 	FEEDBACK_DATA_SOURCE_ID: "test-feedback-data-source-id",
 	WORK_LINKS_DATA_SOURCE_ID: "test-work-links-data-source-id",
+	TODOS_DATA_SOURCE_ID: "test-todos-data-source-id",
+	TASKS_DATA_SOURCE_ID: "test-tasks-data-source-id",
+	MEMOS_DATA_SOURCE_ID: "test-memos-data-source-id",
+	REFERENCE_LIBRARY_PAGE_ID: "test-reference-library-page-id",
 };
 
 const companyId = "11111111-1111-1111-1111-111111111111";

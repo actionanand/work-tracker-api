@@ -42,11 +42,41 @@ export interface NotionMutationOptions {
 }
 
 export interface CreateNotionPageOptions extends NotionMutationOptions {
-	dataSourceId: string;
+	dataSourceId?: string;
+	parentPageId?: string;
+	markdown?: string;
+	allowAsync?: boolean;
 }
 
 export interface UpdateNotionPageOptions extends NotionMutationOptions {
 	pageId: string;
+}
+
+export interface TrashNotionPageOptions {
+	pageId: string;
+	env: Env;
+}
+
+export interface RetrieveNotionMarkdownOptions {
+	pageId: string;
+	env: Env;
+}
+
+export interface UpdateNotionMarkdownOptions extends RetrieveNotionMarkdownOptions {
+	markdown: string;
+	allowAsync?: boolean;
+}
+
+export interface ListNotionBlockChildrenOptions {
+	blockId: string;
+	env: Env;
+	startCursor?: string;
+	pageSize?: number;
+}
+
+export interface RetrieveNotionAsyncTaskOptions {
+	taskId: string;
+	env: Env;
 }
 
 export class NotionQueryError extends Error {
@@ -57,6 +87,24 @@ export class NotionQueryError extends Error {
 		super(`Notion API ${status}`);
 		this.name = "NotionQueryError";
 	}
+}
+
+function notionJsonHeaders(env: Env): HeadersInit {
+	return {
+		Authorization: `Bearer ${env.NOTION_TOKEN}`,
+		"Notion-Version": NOTION_VERSION,
+		"Content-Type": "application/json",
+	};
+}
+
+async function parseNotionResponse<T>(response: Response): Promise<T> {
+	if (!response.ok) {
+		const error = await response.text();
+
+		throw new NotionQueryError(response.status, error);
+	}
+
+	return response.json();
 }
 
 export async function queryNotionDataSource<TPage = unknown>({
@@ -87,22 +135,12 @@ export async function queryNotionDataSource<TPage = unknown>({
 		`https://api.notion.com/v1/data_sources/${dataSourceId}/query`,
 		{
 			method: "POST",
-			headers: {
-				Authorization: `Bearer ${env.NOTION_TOKEN}`,
-				"Notion-Version": NOTION_VERSION,
-				"Content-Type": "application/json",
-			},
+			headers: notionJsonHeaders(env),
 			body: JSON.stringify(body),
 		},
 	);
 
-	if (!response.ok) {
-		const error = await response.text();
-
-		throw new NotionQueryError(response.status, error);
-	}
-
-	return response.json();
+	return parseNotionResponse(response);
 }
 
 export async function getNotionPage<TPage = unknown>({
@@ -111,20 +149,10 @@ export async function getNotionPage<TPage = unknown>({
 }: GetNotionPageOptions): Promise<TPage> {
 	const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
 		method: "GET",
-		headers: {
-			Authorization: `Bearer ${env.NOTION_TOKEN}`,
-			"Notion-Version": NOTION_VERSION,
-			"Content-Type": "application/json",
-		},
+		headers: notionJsonHeaders(env),
 	});
 
-	if (!response.ok) {
-		const error = await response.text();
-
-		throw new NotionQueryError(response.status, error);
-	}
-
-	return response.json();
+	return parseNotionResponse(response);
 }
 
 export async function getNotionDataSource<TDataSource = unknown>({
@@ -135,50 +163,43 @@ export async function getNotionDataSource<TDataSource = unknown>({
 		`https://api.notion.com/v1/data_sources/${dataSourceId}`,
 		{
 			method: "GET",
-			headers: {
-				Authorization: `Bearer ${env.NOTION_TOKEN}`,
-				"Notion-Version": NOTION_VERSION,
-				"Content-Type": "application/json",
-			},
+			headers: notionJsonHeaders(env),
 		},
 	);
 
-	if (!response.ok) {
-		const error = await response.text();
-
-		throw new NotionQueryError(response.status, error);
-	}
-
-	return response.json();
+	return parseNotionResponse(response);
 }
 
 export async function createNotionPage<TPage = unknown>({
 	dataSourceId,
+	parentPageId,
 	env,
 	properties,
+	markdown,
+	allowAsync,
 }: CreateNotionPageOptions): Promise<TPage> {
+	if (!dataSourceId && !parentPageId) {
+		throw new Error("Notion page creation requires a parent");
+	}
+
 	const response = await fetch("https://api.notion.com/v1/pages", {
 		method: "POST",
-		headers: {
-			Authorization: `Bearer ${env.NOTION_TOKEN}`,
-			"Notion-Version": NOTION_VERSION,
-			"Content-Type": "application/json",
-		},
+		headers: notionJsonHeaders(env),
 		body: JSON.stringify({
-			parent: {
-				data_source_id: dataSourceId,
-			},
+			parent: dataSourceId
+				? {
+						data_source_id: dataSourceId,
+					}
+				: {
+						page_id: parentPageId,
+					},
 			properties,
+			...(markdown !== undefined ? { markdown } : {}),
+			...(allowAsync ? { allow_async: true } : {}),
 		}),
 	});
 
-	if (!response.ok) {
-		const error = await response.text();
-
-		throw new NotionQueryError(response.status, error);
-	}
-
-	return response.json();
+	return parseNotionResponse(response);
 }
 
 export async function updateNotionPage<TPage = unknown>({
@@ -188,23 +209,100 @@ export async function updateNotionPage<TPage = unknown>({
 }: UpdateNotionPageOptions): Promise<TPage> {
 	const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
 		method: "PATCH",
-		headers: {
-			Authorization: `Bearer ${env.NOTION_TOKEN}`,
-			"Notion-Version": NOTION_VERSION,
-			"Content-Type": "application/json",
-		},
+		headers: notionJsonHeaders(env),
 		body: JSON.stringify({
 			properties,
 		}),
 	});
 
-	if (!response.ok) {
-		const error = await response.text();
+	return parseNotionResponse(response);
+}
 
-		throw new NotionQueryError(response.status, error);
+export async function trashNotionPage<TPage = unknown>({
+	pageId,
+	env,
+}: TrashNotionPageOptions): Promise<TPage> {
+	const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+		method: "PATCH",
+		headers: notionJsonHeaders(env),
+		body: JSON.stringify({
+			in_trash: true,
+		}),
+	});
+
+	return parseNotionResponse(response);
+}
+
+export async function retrieveNotionMarkdown<TMarkdown = unknown>({
+	pageId,
+	env,
+}: RetrieveNotionMarkdownOptions): Promise<TMarkdown> {
+	const response = await fetch(
+		`https://api.notion.com/v1/pages/${pageId}/markdown`,
+		{
+			method: "GET",
+			headers: notionJsonHeaders(env),
+		},
+	);
+
+	return parseNotionResponse(response);
+}
+
+export async function updateNotionMarkdown<TMarkdown = unknown>({
+	pageId,
+	env,
+	markdown,
+	allowAsync,
+}: UpdateNotionMarkdownOptions): Promise<TMarkdown> {
+	const response = await fetch(
+		`https://api.notion.com/v1/pages/${pageId}/markdown`,
+		{
+			method: "PATCH",
+			headers: notionJsonHeaders(env),
+			body: JSON.stringify({
+				type: "replace_content",
+				replace_content: {
+					new_str: markdown,
+				},
+				...(allowAsync ? { allow_async: true } : {}),
+			}),
+		},
+	);
+
+	return parseNotionResponse(response);
+}
+
+export async function listNotionBlockChildren<TResponse = unknown>({
+	blockId,
+	env,
+	startCursor,
+	pageSize = 100,
+}: ListNotionBlockChildrenOptions): Promise<TResponse> {
+	const url = new URL(`https://api.notion.com/v1/blocks/${blockId}/children`);
+	url.searchParams.set("page_size", String(pageSize));
+
+	if (startCursor) {
+		url.searchParams.set("start_cursor", startCursor);
 	}
 
-	return response.json();
+	const response = await fetch(url.toString(), {
+		method: "GET",
+		headers: notionJsonHeaders(env),
+	});
+
+	return parseNotionResponse(response);
+}
+
+export async function retrieveNotionAsyncTask<TTask = unknown>({
+	taskId,
+	env,
+}: RetrieveNotionAsyncTaskOptions): Promise<TTask> {
+	const response = await fetch(`https://api.notion.com/v1/async_tasks/${taskId}`, {
+		method: "GET",
+		headers: notionJsonHeaders(env),
+	});
+
+	return parseNotionResponse(response);
 }
 
 export async function queryAllNotionDataSourcePages<TPage = unknown>(

@@ -9,9 +9,14 @@ QUERY /api/jiras
 QUERY /api/work-logs
 QUERY /api/feedback
 QUERY /api/work-links
+QUERY /api/todos
+QUERY /api/tasks
+QUERY /api/memos
 ```
 
 These endpoints are authenticated like other protected `/api/*` routes and are read-only. They do not create, update, delete, cache, or mutate Notion data.
+
+Reference Library routes do not support `QUERY` because they operate on a parent page's direct child pages rather than a Notion data source.
 
 ## Headers
 
@@ -64,4 +69,7 @@ The Worker translates supported filters into Notion data-source filters:
 - [Work Log API](work-log-api.md)
 - [Feedback API](feedback-api.md)
 - [Work Links API](work-links-api.md)
+- [To Do API](todo-api.md)
+- [Task API](task-api.md)
+- [Memo API](memo-api.md)
 - [Notion Integration](notion-integration.md)
