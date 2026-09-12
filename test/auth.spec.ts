@@ -212,13 +212,16 @@ function stubEmptyNotionFetch() {
 function expectCorsHeaders(response: Response): void {
 	expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
 	expect(response.headers.get("Access-Control-Allow-Methods")).toBe(
-		"GET, POST, DELETE, OPTIONS",
+		"GET, QUERY, POST, PATCH, DELETE, OPTIONS",
 	);
 	expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
 		"Authorization",
 	);
 	expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
 		"Content-Type",
+	);
+	expect(response.headers.get("Access-Control-Expose-Headers")).toContain(
+		"Accept-Query",
 	);
 }
 

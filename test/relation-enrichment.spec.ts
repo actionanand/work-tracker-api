@@ -180,8 +180,13 @@ function feedbackPage() {
 		properties: {
 			Feedback: { title: [{ plain_text: "Good work" }] },
 			Company: { relation: [{ id: companyId }] },
-			Project: { relation: [{ id: projectId }] },
 			Team: { relation: [{ id: teamId }] },
+			"Work Type": {
+				rollup: {
+					type: "array",
+					array: [{ type: "select", select: { name: "Office Work" } }],
+				},
+			},
 		},
 	};
 }
@@ -501,7 +506,7 @@ describe("relation enrichment", () => {
 		expect(callsFor(fetchMock, testEnv.COMPANIES_DATA_SOURCE_ID)).toHaveLength(0);
 	});
 
-	it("enriches Feedback with company, project, and team refs", async () => {
+	it("enriches Feedback with company and team refs", async () => {
 		const fetchMock = stubCatalogFetch(testEnv.FEEDBACK_DATA_SOURCE_ID, [feedbackPage()]);
 
 		const response = await fetchWorker("/api/feedback?include=relations");
@@ -511,16 +516,15 @@ describe("relation enrichment", () => {
 			data: [
 				{
 					companyIds: [companyId],
-					projectIds: [projectId],
 					teamIds: [teamId],
+					workType: "Office Work",
 					companies: [companyRef],
-					projects: [projectRef],
 					teams: [teamRef],
 				},
 			],
 		});
 		expect(callsFor(fetchMock, testEnv.COMPANIES_DATA_SOURCE_ID)).toHaveLength(2);
-		expect(callsFor(fetchMock, testEnv.PROJECTS_DATA_SOURCE_ID)).toHaveLength(1);
+		expect(callsFor(fetchMock, testEnv.PROJECTS_DATA_SOURCE_ID)).toHaveLength(0);
 		expect(callsFor(fetchMock, testEnv.TEAMS_DATA_SOURCE_ID)).toHaveLength(1);
 	});
 

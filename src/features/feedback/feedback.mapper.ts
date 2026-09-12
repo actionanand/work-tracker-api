@@ -12,6 +12,22 @@ interface NotionFeedbackProperty {
 	select?: {
 		name?: string;
 	} | null;
+	rollup?: {
+		type?: string;
+		array?: Array<{
+			select?: {
+				name?: string;
+			} | null;
+			title?: NotionTextItem[];
+			rich_text?: NotionTextItem[];
+			formula?: {
+				string?: string | null;
+			};
+		}>;
+		select?: {
+			name?: string;
+		} | null;
+	};
 	date?: {
 		start?: string | null;
 	} | null;
@@ -35,10 +51,10 @@ export interface Feedback {
 	personType: string | null;
 	context: string | null;
 	feedbackType: string | null;
+	workType: string | null;
 	details: string;
 	actionFollowUp: string;
 	companyIds: string[];
-	projectIds: string[];
 	teamIds: string[];
 }
 
@@ -54,6 +70,34 @@ function relationIds(property: NotionFeedbackProperty | undefined): string[] {
 	return (property?.relation ?? []).map((item) => item.id);
 }
 
+function rollupText(property: NotionFeedbackProperty | undefined): string | null {
+	const rollup = property?.rollup;
+
+	if (!rollup) {
+		return null;
+	}
+
+	if (rollup.select?.name) {
+		return rollup.select.name.trim();
+	}
+
+	const value = (rollup.array ?? [])
+		.map((item) => {
+			if (item.select?.name) {
+				return item.select.name.trim();
+			}
+
+			if (item.formula?.string) {
+				return item.formula.string.trim();
+			}
+
+			return plainText(item.title) || plainText(item.rich_text);
+		})
+		.find((item) => item.length > 0);
+
+	return value ?? null;
+}
+
 export function mapFeedback(page: NotionFeedbackPage): Feedback {
 	const p = page.properties;
 
@@ -67,10 +111,10 @@ export function mapFeedback(page: NotionFeedbackPage): Feedback {
 		personType: selectName(p["Person Type"]),
 		context: selectName(p.Context),
 		feedbackType: selectName(p["Feedback Type"]),
+		workType: rollupText(p["Work Type"]),
 		details: plainText(p.Details?.rich_text),
 		actionFollowUp: plainText(p["Action / Follow-up"]?.rich_text),
 		companyIds: relationIds(p.Company),
-		projectIds: relationIds(p.Project),
 		teamIds: relationIds(p.Team),
 	};
 }

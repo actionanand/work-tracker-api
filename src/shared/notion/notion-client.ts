@@ -31,6 +31,24 @@ export interface GetNotionPageOptions {
 	env: Env;
 }
 
+export interface GetNotionDataSourceOptions {
+	dataSourceId: string;
+	env: Env;
+}
+
+export interface NotionMutationOptions {
+	env: Env;
+	properties: Record<string, unknown>;
+}
+
+export interface CreateNotionPageOptions extends NotionMutationOptions {
+	dataSourceId: string;
+}
+
+export interface UpdateNotionPageOptions extends NotionMutationOptions {
+	pageId: string;
+}
+
 export class NotionQueryError extends Error {
 	constructor(
 		readonly status: number,
@@ -98,6 +116,86 @@ export async function getNotionPage<TPage = unknown>({
 			"Notion-Version": NOTION_VERSION,
 			"Content-Type": "application/json",
 		},
+	});
+
+	if (!response.ok) {
+		const error = await response.text();
+
+		throw new NotionQueryError(response.status, error);
+	}
+
+	return response.json();
+}
+
+export async function getNotionDataSource<TDataSource = unknown>({
+	dataSourceId,
+	env,
+}: GetNotionDataSourceOptions): Promise<TDataSource> {
+	const response = await fetch(
+		`https://api.notion.com/v1/data_sources/${dataSourceId}`,
+		{
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${env.NOTION_TOKEN}`,
+				"Notion-Version": NOTION_VERSION,
+				"Content-Type": "application/json",
+			},
+		},
+	);
+
+	if (!response.ok) {
+		const error = await response.text();
+
+		throw new NotionQueryError(response.status, error);
+	}
+
+	return response.json();
+}
+
+export async function createNotionPage<TPage = unknown>({
+	dataSourceId,
+	env,
+	properties,
+}: CreateNotionPageOptions): Promise<TPage> {
+	const response = await fetch("https://api.notion.com/v1/pages", {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${env.NOTION_TOKEN}`,
+			"Notion-Version": NOTION_VERSION,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			parent: {
+				data_source_id: dataSourceId,
+			},
+			properties,
+		}),
+	});
+
+	if (!response.ok) {
+		const error = await response.text();
+
+		throw new NotionQueryError(response.status, error);
+	}
+
+	return response.json();
+}
+
+export async function updateNotionPage<TPage = unknown>({
+	pageId,
+	env,
+	properties,
+}: UpdateNotionPageOptions): Promise<TPage> {
+	const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+		method: "PATCH",
+		headers: {
+			Authorization: `Bearer ${env.NOTION_TOKEN}`,
+			"Notion-Version": NOTION_VERSION,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			properties,
+		}),
 	});
 
 	if (!response.ok) {

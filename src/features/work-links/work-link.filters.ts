@@ -13,16 +13,28 @@ export const workLinkFilters = {
 			contains: companyId,
 		},
 	}),
+	companies: (companyIds: string[]): NotionQueryFilter | undefined =>
+		orFilters(companyIds.map((companyId) => workLinkFilters.company(companyId))),
 	project: (projectId: string): NotionQueryFilter => ({
 		property: "Project",
 		relation: {
 			contains: projectId,
 		},
 	}),
+	projects: (projectIds: string[]): NotionQueryFilter | undefined =>
+		orFilters(projectIds.map((projectId) => workLinkFilters.project(projectId))),
 	type: (type: string): NotionQueryFilter => ({
 		property: "Type",
 		select: {
 			equals: type,
+		},
+	}),
+	types: (types: string[]): NotionQueryFilter | undefined =>
+		orFilters(types.map((type) => workLinkFilters.type(type))),
+	activeValue: (active: boolean): NotionQueryFilter => ({
+		property: "Active",
+		checkbox: {
+			equals: active,
 		},
 	}),
 	query: (query: string): NotionQueryFilter => ({
@@ -31,7 +43,27 @@ export const workLinkFilters = {
 			contains: query,
 		},
 	}),
-} satisfies Record<string, NotionQueryFilter | ((value: string) => NotionQueryFilter)>;
+} satisfies Record<
+	string,
+	| NotionQueryFilter
+	| ((value: string) => NotionQueryFilter)
+	| ((values: string[]) => NotionQueryFilter | undefined)
+	| ((value: boolean) => NotionQueryFilter)
+>;
+
+function orFilters(filters: NotionQueryFilter[]): NotionQueryFilter | undefined {
+	if (filters.length === 0) {
+		return undefined;
+	}
+
+	if (filters.length === 1) {
+		return filters[0];
+	}
+
+	return {
+		or: filters,
+	};
+}
 
 export function combineWorkLinkFilters(
 	filters: Array<NotionQueryFilter | undefined>,

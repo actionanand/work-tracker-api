@@ -141,7 +141,7 @@ export interface Env {
 }
 ```
 
-`src/shared/notion/notion-client.ts` centralizes reusable Notion data-source querying:
+`src/shared/notion/` centralizes reusable Notion access and schema helpers:
 
 - Notion API version
 - request URL construction
@@ -149,6 +149,15 @@ export interface Env {
 - JSON body construction
 - common HTTP error handling
 - response typing for query results, `has_more`, and `next_cursor`
+- data-source schema reads for metadata and option validation
+- safe page-property builders for selected write endpoints
+- page ownership checks before PATCH writes
+
+`src/shared/http/` centralizes request helpers:
+
+- JSON body parsing
+- HTTP QUERY body validation
+- common validation error responses
 
 `src/shared/relations/` centralizes optional shallow relation enrichment:
 
@@ -185,9 +194,9 @@ The pattern means:
 | `*.filters.ts` | External API filter definitions. |
 | `*.mapper.ts` | Raw external data to API model mapping. |
 
-Potential future modules include additional Dashboard APIs and write APIs.
+Potential future modules include additional Dashboard APIs and write APIs for other resources.
 
-Sprints, Sprint Allocations, Companies, Teams, Projects, Dashboard, Work Logs, Release Items, Feedback, and Work Links are implemented. Write APIs are not implemented yet.
+Sprints, Sprint Allocations, Companies, Teams, Projects, Dashboard, Work Logs, Release Items, Feedback, and Work Links are implemented. Controlled write APIs currently exist for Work Logs, Feedback, and Work Links.
 
 ## Thin Entry Point
 
@@ -212,6 +221,7 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 - [Release API](release-api.md)
 - [Feedback API](feedback-api.md)
 - [Work Links API](work-links-api.md)
+- [HTTP QUERY Method](http-query-method.md)
 - [Dashboard API](dashboard-api.md)
 - [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)

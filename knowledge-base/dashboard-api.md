@@ -63,7 +63,7 @@ With `projectId`, project-related sections are filtered through the Project rela
 
 With `companyId`, the dashboard validates the Company, resolves matching Projects through the Projects data source, and uses those Project IDs for JIRAs, Sprints, Work Logs, and Release Items. Feedback and Work Links use their direct Company relation filters. A valid Company with no matching Projects returns empty project-related sections.
 
-With both `companyId` and `projectId`, both IDs are validated. Directly scoped sections such as Feedback and Work Links use both filters. The dashboard does not currently assert that the Project belongs to the Company.
+With both `companyId` and `projectId`, both IDs are validated. Work Links use both direct filters. Feedback is scoped through Company because the live Feedback schema does not have a direct Project relation. The dashboard does not currently assert that the Project belongs to the Company.
 
 Release Items do not have a direct Project relation. The dashboard never applies Project IDs to Release Item rollups such as `Sprints`; it filters Release Items only through the direct `JIRAs` relation.
 

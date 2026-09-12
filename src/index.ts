@@ -26,7 +26,7 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 	const url = new URL(request.url);
 
 	if (request.method === "OPTIONS") {
-		return corsPreflightResponse();
+		return corsPreflightResponse(url.pathname);
 	}
 
 	if (request.method === "GET" && url.pathname === "/") {
