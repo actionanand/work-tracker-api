@@ -36,6 +36,12 @@ export function selectByIdProperty(optionId: string | null): unknown {
 	};
 }
 
+export function statusByIdProperty(optionId: string | null): unknown {
+	return {
+		status: optionId ? { id: optionId } : null,
+	};
+}
+
 export function multiSelectByIdProperty(optionIds: string[]): unknown {
 	return {
 		multi_select: optionIds.map((id) => ({ id })),

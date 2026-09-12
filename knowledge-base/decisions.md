@@ -304,6 +304,34 @@ The Worker stores a PBKDF2-SHA256 password verifier in `AUTH_PASSWORD_HASH` plus
 
 Accepted and implemented.
 
+## 23. Use QUERY for Productivity Data-Source Filtering
+
+**Decision**
+
+Expose To Dos, Tasks, and Memos as protected Notion-backed resources and use HTTP `QUERY` for advanced collection filters.
+
+**Reason**
+
+These resources need flexible filters without expanding the API into many fixed view routes. The Worker validates domain-level filters, sends equivalent Notion data-source filters, and keeps filtering server-side.
+
+**Status**
+
+Accepted and implemented.
+
+## 24. Treat Memo and Reference Content as Page-Body Markdown
+
+**Decision**
+
+Store long Memo and Reference Library content in Notion page-body markdown, not as large rich text properties.
+
+**Reason**
+
+Page-body markdown better matches note/reference content and keeps data-source properties focused on searchable metadata. Reference Library imports create normal child pages under the configured parent page.
+
+**Status**
+
+Accepted and implemented.
+
 ## 13. Do Not Embed Shared Backend Credentials Inside the Android APK
 
 **Decision**

@@ -132,11 +132,15 @@ src/
     │   ├── feedback.filters.ts
     │   ├── feedback.service.ts
     │   └── feedback.routes.ts
-    └── work-links/
-        ├── work-link.mapper.ts
-        ├── work-link.filters.ts
-        ├── work-link.service.ts
-        └── work-link.routes.ts
+    ├── work-links/
+    │   ├── work-link.mapper.ts
+    │   ├── work-link.filters.ts
+    │   ├── work-link.service.ts
+    │   └── work-link.routes.ts
+    ├── todos/
+    ├── tasks/
+    ├── memos/
+    └── reference-library/
 ```
 
 Layer responsibilities:
@@ -167,6 +171,10 @@ Layer responsibilities:
 | `src/features/releases/*` | Release Item routes, filters, service orchestration, and mapping. |
 | `src/features/feedback/*` | Feedback routes, filters, service orchestration, and mapping. |
 | `src/features/work-links/*` | Work Link routes, filters, service orchestration, and mapping. |
+| `src/features/todos/*` | To Do routes, filters, service orchestration, and mapping. |
+| `src/features/tasks/*` | Task and follow-up routes, filters, service orchestration, and mapping. |
+| `src/features/memos/*` | Memo routes, filters, service orchestration, metadata mapping, and page-body markdown handling. |
+| `src/features/reference-library/*` | Reference Library child-page listing, detail markdown reads, markdown import, and async import polling. |
 
 ## API Endpoints
 
@@ -226,6 +234,32 @@ Layer responsibilities:
 | `QUERY` | `/api/work-links` | JSON-body read query for Work Links with server-side Notion filtering. |
 | `POST` | `/api/work-links` | Create a Work Link through allow-listed mapped fields. |
 | `PATCH` | `/api/work-links/:pageId` | Update a Work Link page after page ownership validation. |
+| `GET` | `/api/todos/meta` | Dynamic To Do field metadata from the Notion data-source schema. |
+| `GET` | `/api/todos` | To Dos from the configured Notion data source. |
+| `QUERY` | `/api/todos` | JSON-body read query for To Dos with server-side Notion filtering. |
+| `POST` | `/api/todos` | Create a To Do through allow-listed mapped fields. |
+| `PATCH` | `/api/todos/:pageId` | Update a To Do page after page ownership validation. |
+| `DELETE` | `/api/todos/:pageId` | Move a To Do page to Notion trash after page ownership validation. |
+| `POST` | `/api/todos/bulk-delete` | Move a validated batch of To Do pages to Notion trash. |
+| `GET` | `/api/tasks/meta` | Dynamic Task field metadata from the Notion data-source schema. |
+| `GET` | `/api/tasks` | Tasks and follow-ups from the configured Notion data source. |
+| `QUERY` | `/api/tasks` | JSON-body read query for Tasks with server-side Notion filtering. |
+| `POST` | `/api/tasks` | Create a Task through allow-listed mapped fields. |
+| `PATCH` | `/api/tasks/:pageId` | Update a Task page after page ownership validation. |
+| `DELETE` | `/api/tasks/:pageId` | Move a Task page to Notion trash after page ownership validation. |
+| `POST` | `/api/tasks/bulk-delete` | Move a validated batch of Task pages to Notion trash. |
+| `GET` | `/api/memos/meta` | Dynamic Memo field metadata from the Notion data-source schema. |
+| `GET` | `/api/memos` | Memos from the configured Notion data source. |
+| `QUERY` | `/api/memos` | JSON-body read query for Memos with server-side Notion filtering. |
+| `GET` | `/api/memos/:pageId` | Single Memo detail with Notion page-body markdown. |
+| `POST` | `/api/memos` | Create a Memo and optional page-body markdown. |
+| `PATCH` | `/api/memos/:pageId` | Update Memo properties and optional page-body markdown after ownership validation. |
+| `DELETE` | `/api/memos/:pageId` | Move a Memo page to Notion trash after page ownership validation. |
+| `POST` | `/api/memos/bulk-delete` | Move a validated batch of Memo pages to Notion trash. |
+| `GET` | `/api/reference-library` | Direct child pages under the configured Reference Library Notion parent page. |
+| `GET` | `/api/reference-library/:pageId` | Single direct child page detail with markdown. |
+| `POST` | `/api/reference-library/import` | Import a `.md` or `.markdown` file as a normal child page. |
+| `GET` | `/api/reference-library/imports/:taskId` | Poll a Notion async markdown import task. |
 
 All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
@@ -235,9 +269,9 @@ Auth access tokens last 1 hour. While a token is still valid and its backing D1 
 
 Selected endpoints support optional shallow relation enrichment with `include=relations`. Existing raw relation ID fields remain unchanged, and default responses are unchanged when `include` is absent.
 
-`QUERY` is supported by `/api/jiras`, `/api/work-logs`, `/api/feedback`, and `/api/work-links` for JSON-body read requests. These endpoints advertise `Accept-Query: application/json`, remain safe/idempotent, and translate domain filters into Notion data-source filters. Clients do not send raw Notion filter JSON.
+`QUERY` is supported by `/api/jiras`, `/api/work-logs`, `/api/feedback`, `/api/work-links`, `/api/todos`, `/api/tasks`, and `/api/memos` for JSON-body read requests. These endpoints advertise `Accept-Query: application/json`, remain safe/idempotent, and translate domain filters into Notion data-source filters. Clients do not send raw Notion filter JSON. Metadata endpoints and Reference Library endpoints do not advertise `Accept-Query`.
 
-Write endpoints are intentionally limited to Work Logs, Feedback, and Work Links. They accept only documented mapped fields, validate Notion select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion.
+Write endpoints are intentionally allow-listed. They accept only documented mapped fields, validate Notion status/select/multi-select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion. Delete endpoints move owned pages to Notion trash; they do not hard-delete data.
 
 ## API Pagination
 
@@ -301,6 +335,10 @@ JIRA list responses use this structure:
 - Notion Release Items Data Source ID
 - Notion Feedback Data Source ID
 - Notion Work Links Data Source ID
+- Notion To Dos Data Source ID
+- Notion Tasks Data Source ID
+- Notion Memos Data Source ID
+- Notion Reference Library Page ID
 
 ## Setup
 
@@ -353,6 +391,10 @@ Configure non-secret IDs in `wrangler.jsonc`:
   "RELEASE_ITEMS_DATA_SOURCE_ID": "your-release-items-data-source-id",
   "FEEDBACK_DATA_SOURCE_ID": "your-feedback-data-source-id",
   "WORK_LINKS_DATA_SOURCE_ID": "your-work-links-data-source-id",
+  "TODOS_DATA_SOURCE_ID": "your-todos-data-source-id",
+  "TASKS_DATA_SOURCE_ID": "your-tasks-data-source-id",
+  "MEMOS_DATA_SOURCE_ID": "your-memos-data-source-id",
+  "REFERENCE_LIBRARY_PAGE_ID": "your-reference-library-page-id",
   "AUTH_PASSWORD_ITERATIONS": "100000",
   "AUTH_TOKEN_TTL_SECONDS": "3600",
   "AUTH_RENEW_WINDOW_SECONDS": "900",
@@ -435,6 +477,10 @@ curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage -H "
 curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/work-links/active?type=Documentation -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/jiras/CRI-1234?include=relations -H "Authorization: Bearer $TOKEN" | jq
+curl -s -X QUERY http://localhost:8787/api/todos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"statuses":["In progress"],"dueOnOrBefore":"2026-09-30"}}' | jq
+curl -s -X QUERY http://localhost:8787/api/tasks -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"priorities":["High"],"companyIds":["company-page-id"]},"includeRelations":true}' | jq
+curl -s -X QUERY http://localhost:8787/api/memos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"tags":["api"],"pinned":true}}' | jq
+curl -s http://localhost:8787/api/reference-library -H "Authorization: Bearer $TOKEN" | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.
@@ -473,6 +519,10 @@ Living technical references:
 - [Release API](knowledge-base/release-api.md)
 - [Feedback API](knowledge-base/feedback-api.md)
 - [Work Links API](knowledge-base/work-links-api.md)
+- [To Do API](knowledge-base/todo-api.md)
+- [Task API](knowledge-base/task-api.md)
+- [Memo API](knowledge-base/memo-api.md)
+- [Reference Library API](knowledge-base/reference-library-api.md)
 - [HTTP QUERY Method](knowledge-base/http-query-method.md)
 - [Dashboard API](knowledge-base/dashboard-api.md)
 - [Relation Enrichment](knowledge-base/relation-enrichment.md)

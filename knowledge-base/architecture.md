@@ -88,11 +88,15 @@ src/
     │   ├── feedback.filters.ts
     │   ├── feedback.service.ts
     │   └── feedback.routes.ts
-    └── work-links/
-        ├── work-link.mapper.ts
-        ├── work-link.filters.ts
-        ├── work-link.service.ts
-        └── work-link.routes.ts
+    ├── work-links/
+    │   ├── work-link.mapper.ts
+    │   ├── work-link.filters.ts
+    │   ├── work-link.service.ts
+    │   └── work-link.routes.ts
+    ├── todos/
+    ├── tasks/
+    ├── memos/
+    └── reference-library/
 ```
 
 ## Feature-Based Organization
@@ -113,6 +117,10 @@ src/features/work-logs/
 src/features/releases/
 src/features/feedback/
 src/features/work-links/
+src/features/todos/
+src/features/tasks/
+src/features/memos/
+src/features/reference-library/
 ```
 
 ## Shared Code
@@ -138,6 +146,10 @@ export interface Env {
   RELEASE_ITEMS_DATA_SOURCE_ID: string;
   FEEDBACK_DATA_SOURCE_ID: string;
   WORK_LINKS_DATA_SOURCE_ID: string;
+  TODOS_DATA_SOURCE_ID: string;
+  TASKS_DATA_SOURCE_ID: string;
+  MEMOS_DATA_SOURCE_ID: string;
+  REFERENCE_LIBRARY_PAGE_ID: string;
 }
 ```
 
@@ -151,7 +163,9 @@ export interface Env {
 - response typing for query results, `has_more`, and `next_cursor`
 - data-source schema reads for metadata and option validation
 - safe page-property builders for selected write endpoints
-- page ownership checks before PATCH writes
+- page ownership checks before PATCH and trash operations
+- page-body markdown reads and writes
+- Reference Library parent-page child listing and async markdown import polling
 
 `src/shared/http/` centralizes request helpers:
 
@@ -196,7 +210,7 @@ The pattern means:
 
 Potential future modules include additional Dashboard APIs and write APIs for other resources.
 
-Sprints, Sprint Allocations, Companies, Teams, Projects, Dashboard, Work Logs, Release Items, Feedback, and Work Links are implemented. Controlled write APIs currently exist for Work Logs, Feedback, and Work Links.
+Sprints, Sprint Allocations, Companies, Teams, Projects, Dashboard, Work Logs, Release Items, Feedback, Work Links, To Dos, Tasks, Memos, and Reference Library are implemented. Controlled write APIs exist only for allow-listed mapped fields and owned Notion pages.
 
 ## Thin Entry Point
 
@@ -221,6 +235,10 @@ Keeping the entry point thin prevents unrelated features from crowding into the 
 - [Release API](release-api.md)
 - [Feedback API](feedback-api.md)
 - [Work Links API](work-links-api.md)
+- [To Do API](todo-api.md)
+- [Task API](task-api.md)
+- [Memo API](memo-api.md)
+- [Reference Library API](reference-library-api.md)
 - [HTTP QUERY Method](http-query-method.md)
 - [Dashboard API](dashboard-api.md)
 - [Relation Enrichment](relation-enrichment.md)

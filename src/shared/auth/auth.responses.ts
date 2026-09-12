@@ -112,6 +112,9 @@ export function corsPreflightResponse(pathname = ""): Response {
 		"/api/feedback",
 		"/api/work-links",
 		"/api/jiras",
+		"/api/todos",
+		"/api/tasks",
+		"/api/memos",
 	].includes(pathname);
 	const allow = allowHeaderForPath(pathname);
 
@@ -133,6 +136,44 @@ function allowHeaderForPath(pathname: string): string | null {
 
 	if (["/api/work-logs", "/api/feedback", "/api/work-links"].includes(pathname)) {
 		return "GET, QUERY, POST, OPTIONS";
+	}
+
+	if (["/api/todos", "/api/tasks", "/api/memos"].includes(pathname)) {
+		return "GET, QUERY, POST, OPTIONS";
+	}
+
+	if (
+		["/api/todos/bulk-delete", "/api/tasks/bulk-delete", "/api/memos/bulk-delete"].includes(
+			pathname,
+		)
+	) {
+		return "POST, OPTIONS";
+	}
+
+	if (
+		/^\/api\/todos\/[^/]+$/.test(pathname) ||
+		/^\/api\/tasks\/[^/]+$/.test(pathname)
+	) {
+		return "PATCH, DELETE, OPTIONS";
+	}
+
+	if (/^\/api\/memos\/[^/]+$/.test(pathname)) {
+		return "GET, PATCH, DELETE, OPTIONS";
+	}
+
+	if (pathname === "/api/reference-library") {
+		return "GET, OPTIONS";
+	}
+
+	if (pathname === "/api/reference-library/import") {
+		return "POST, OPTIONS";
+	}
+
+	if (
+		/^\/api\/reference-library\/imports\/[^/]+$/.test(pathname) ||
+		/^\/api\/reference-library\/[^/]+$/.test(pathname)
+	) {
+		return "GET, OPTIONS";
 	}
 
 	if (

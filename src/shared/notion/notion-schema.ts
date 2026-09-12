@@ -14,6 +14,9 @@ interface NotionPropertySchema {
 	select?: {
 		options?: NotionOption[];
 	};
+	status?: {
+		options?: NotionOption[];
+	};
 	multi_select?: {
 		options?: NotionOption[];
 	};
@@ -100,6 +103,8 @@ function getOptions(
 	const options =
 		property?.type === "multi_select"
 			? property.multi_select?.options
+			: property?.type === "status"
+				? property.status?.options
 			: property?.select?.options;
 
 	return (options ?? []).flatMap((option) => {

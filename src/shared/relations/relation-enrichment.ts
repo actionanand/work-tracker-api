@@ -3,6 +3,7 @@ import type { Jira } from "../../features/jiras/jira.mapper";
 import type { Project } from "../../features/projects/project.mapper";
 import type { ReleaseItem } from "../../features/releases/release.mapper";
 import type { Sprint } from "../../features/sprints/sprint.mapper";
+import type { Task } from "../../features/tasks/task.mapper";
 import type { WorkLink } from "../../features/work-links/work-link.mapper";
 import type { WorkLog } from "../../features/work-logs/work-log.mapper";
 import type { Env } from "../env";
@@ -252,6 +253,29 @@ export async function enrichWorkLinks(
 		...workLink,
 		companies: resolveRefs(workLink.companyIds, companies),
 		projects: resolveRefs(workLink.projectIds, projects),
+	}));
+}
+
+export type EnrichedTask = Task & {
+	companies: CompanyRef[];
+	jiras: JiraRef[];
+};
+
+export async function enrichTasks(
+	env: Env,
+	tasks: Task[],
+): Promise<EnrichedTask[]> {
+	const companyIds = uniqueIds(tasks.map((task) => task.companyIds));
+	const jiraIds = uniqueIds(tasks.map((task) => task.jiraIds));
+	const [companies, jiras] = await Promise.all([
+		loadCatalogIfNeeded(companyIds, () => loadCompanyCatalog(env)),
+		loadCatalogIfNeeded(jiraIds, () => loadJiraCatalog(env)),
+	]);
+
+	return tasks.map((task) => ({
+		...task,
+		companies: resolveRefs(task.companyIds, companies),
+		jiras: resolveRefs(task.jiraIds, jiras),
 	}));
 }
 
