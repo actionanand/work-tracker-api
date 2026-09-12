@@ -52,6 +52,23 @@ const currentFilter = {
 	},
 };
 
+const validForListFilter = {
+	and: [
+		{
+			property: "JIRA",
+			relation: {
+				is_not_empty: true,
+			},
+		},
+		{
+			property: "Sprint",
+			relation: {
+				is_not_empty: true,
+			},
+		},
+	],
+};
+
 const sprintFilter = {
 	property: "Sprint",
 	relation: {
@@ -77,27 +94,34 @@ const routeCases = [
 		path: "/api/sprint-allocations",
 		expectedBody: {
 			page_size: 25,
+			filter: validForListFilter,
 		},
 	},
 	{
 		path: "/api/sprint-allocations/current",
 		expectedBody: {
 			page_size: 25,
-			filter: currentFilter,
+			filter: {
+				and: [validForListFilter, currentFilter],
+			},
 		},
 	},
 	{
 		path: "/api/sprint-allocations?sprintId=44444444-4444-4444-4444-444444444444",
 		expectedBody: {
 			page_size: 25,
-			filter: sprintFilter,
+			filter: {
+				and: [validForListFilter, sprintFilter],
+			},
 		},
 	},
 	{
 		path: "/api/sprint-allocations?jiraId=55555555-5555-5555-5555-555555555555",
 		expectedBody: {
 			page_size: 25,
-			filter: jiraFilter,
+			filter: {
+				and: [validForListFilter, jiraFilter],
+			},
 		},
 	},
 	{
@@ -105,7 +129,7 @@ const routeCases = [
 		expectedBody: {
 			page_size: 25,
 			filter: {
-				and: [sprintFilter, jiraFilter],
+				and: [validForListFilter, sprintFilter, jiraFilter],
 			},
 		},
 	},
@@ -114,7 +138,9 @@ const routeCases = [
 		expectedBody: {
 			page_size: 6,
 			start_cursor: "allocation-cursor",
-			filter: currentFilter,
+			filter: {
+				and: [validForListFilter, currentFilter],
+			},
 		},
 	},
 ] as const;
@@ -172,6 +198,92 @@ const directCheckboxRollupPage = {
 	},
 };
 
+const zeroPlannedDaysAllocationPage = {
+	id: "zero-planned-days-allocation-page-id",
+	properties: {
+		Allocation: {
+			title: [],
+		},
+		Sprint: {
+			relation: [{ id: "44444444-4444-4444-4444-444444444444" }],
+		},
+		JIRA: {
+			relation: [{ id: "55555555-5555-5555-5555-555555555555" }],
+		},
+		"Planned Days": {
+			number: 0,
+		},
+		Notes: {
+			rich_text: [],
+		},
+		"Sprint Active": {
+			rollup: {
+				type: "array",
+				array: [
+					{
+						type: "checkbox",
+						checkbox: true,
+					},
+				],
+			},
+		},
+	},
+};
+
+const missingJiraAllocationPage = {
+	id: "missing-jira-allocation-page-id",
+	properties: {
+		Allocation: {
+			title: [{ plain_text: "Missing JIRA" }],
+		},
+		Sprint: {
+			relation: [{ id: "44444444-4444-4444-4444-444444444444" }],
+		},
+		JIRA: {
+			relation: [],
+		},
+		"Planned Days": {
+			number: 4,
+		},
+		Notes: {
+			rich_text: [],
+		},
+		"Sprint Active": {
+			rollup: {
+				type: "array",
+				array: [{ type: "checkbox", checkbox: true }],
+			},
+		},
+	},
+};
+
+const missingSprintAllocationPage = {
+	id: "missing-sprint-allocation-page-id",
+	properties: {
+		Allocation: {
+			title: [{ plain_text: "Missing Sprint" }],
+		},
+		Sprint: {
+			relation: [],
+		},
+		JIRA: {
+			relation: [{ id: "55555555-5555-5555-5555-555555555555" }],
+		},
+		"Planned Days": {
+			number: 5,
+		},
+		Notes: {
+			rich_text: [],
+		},
+		"Sprint Active": {
+			rollup: {
+				type: "array",
+				array: [{ type: "checkbox", checkbox: true }],
+			},
+		},
+	},
+};
+
 const defaultAllocationPage = {
 	id: "default-allocation-page-id",
 	properties: {
@@ -191,24 +303,14 @@ const expectedAllocation = {
 	sprintActive: true,
 };
 
-const expectedDirectCheckboxRollupAllocation = {
-	id: "direct-rollup-allocation-page-id",
-	allocation: "Direct rollup",
-	plannedDays: 0,
-	notes: "",
-	sprintIds: [],
-	jiraIds: [],
-	sprintActive: true,
-};
-
-const expectedDefaultAllocation = {
-	id: "default-allocation-page-id",
+const expectedZeroPlannedDaysAllocation = {
+	id: "zero-planned-days-allocation-page-id",
 	allocation: "",
 	plannedDays: 0,
 	notes: "",
-	sprintIds: [],
-	jiraIds: [],
-	sprintActive: false,
+	sprintIds: ["44444444-4444-4444-4444-444444444444"],
+	jiraIds: ["55555555-5555-5555-5555-555555555555"],
+	sprintActive: true,
 };
 
 function stubNotionFetch() {
@@ -217,6 +319,9 @@ function stubNotionFetch() {
 			results: [
 				fullAllocationPage,
 				directCheckboxRollupPage,
+				zeroPlannedDaysAllocationPage,
+				missingJiraAllocationPage,
+				missingSprintAllocationPage,
 				defaultAllocationPage,
 			],
 			has_more: false,
@@ -280,15 +385,119 @@ describe("Sprint Allocation API routes", () => {
 			expect(await response.json()).toEqual({
 				data: [
 					expectedAllocation,
-					expectedDirectCheckboxRollupAllocation,
-					expectedDefaultAllocation,
+					expectedZeroPlannedDaysAllocation,
 				],
-				count: 3,
+				count: 2,
 				hasMore: false,
 				nextCursor: null,
 			});
 		},
 	);
+
+	it("excludes allocations missing a JIRA relation from list responses", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				results: [missingJiraAllocationPage],
+				has_more: false,
+				next_cursor: null,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/sprint-allocations");
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			data: [],
+			count: 0,
+			hasMore: false,
+			nextCursor: null,
+		});
+	});
+
+	it("excludes allocations missing a Sprint relation from list responses", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				results: [missingSprintAllocationPage],
+				has_more: false,
+				next_cursor: null,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/sprint-allocations");
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			data: [],
+			count: 0,
+			hasMore: false,
+			nextCursor: null,
+		});
+	});
+
+	it("excludes allocations missing both JIRA and Sprint relations from list responses", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				results: [defaultAllocationPage],
+				has_more: false,
+				next_cursor: null,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/sprint-allocations");
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			data: [],
+			count: 0,
+			hasMore: false,
+			nextCursor: null,
+		});
+	});
+
+	it("keeps zero planned days when JIRA and Sprint relations are present", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				results: [zeroPlannedDaysAllocationPage],
+				has_more: false,
+				next_cursor: null,
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/sprint-allocations");
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			data: [expectedZeroPlannedDaysAllocation],
+			count: 1,
+			hasMore: false,
+			nextCursor: null,
+		});
+	});
+
+	it("preserves pagination metadata while filtering invalid returned allocations", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				results: [fullAllocationPage, missingJiraAllocationPage],
+				has_more: true,
+				next_cursor: "next-valid-allocation-page",
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/sprint-allocations?pageSize=2");
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			data: [expectedAllocation],
+			count: 1,
+			hasMore: true,
+			nextCursor: "next-valid-allocation-page",
+		});
+	});
 
 	it("lets unknown Sprint Allocation subpaths fall through to the main Worker 404", async () => {
 		const fetchMock = stubNotionFetch();
@@ -328,4 +537,3 @@ describe("Sprint Allocation API routes", () => {
 		expect(response).toBeNull();
 	});
 });
-

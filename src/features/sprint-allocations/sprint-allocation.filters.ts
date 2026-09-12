@@ -1,6 +1,22 @@
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
 
 export const sprintAllocationFilters = {
+	validForList: {
+		and: [
+			{
+				property: "JIRA",
+				relation: {
+					is_not_empty: true,
+				},
+			},
+			{
+				property: "Sprint",
+				relation: {
+					is_not_empty: true,
+				},
+			},
+		],
+	},
 	current: {
 		property: "Sprint Active",
 		rollup: {
