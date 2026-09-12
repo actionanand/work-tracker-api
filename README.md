@@ -27,7 +27,8 @@ The Worker currently acts as:
 - authentication boundary for Work Tracker API routes
 - proxy between the client and Notion
 - response transformation layer from raw Notion JSON to app-friendly JSON
-- future location for caching, aggregation, and write operations
+- controlled write layer for selected Notion-backed resources
+- future location for caching and additional aggregation
 
 ## Production
 
@@ -66,8 +67,18 @@ src/
 │   │   └── auth.types.ts
 │   ├── pagination/
 │   │   └── pagination.ts
+│   ├── http/
+│   │   ├── http-query.ts
+│   │   ├── request-body.ts
+│   │   └── validation.ts
+│   ├── relations/
+│   │   └── relation-enrichment.ts
 │   └── notion/
-│       └── notion-client.ts
+│       ├── notion-client.ts
+│       ├── notion-id.ts
+│       ├── notion-page-ownership.ts
+│       ├── notion-properties.ts
+│       └── notion-schema.ts
 └── features/
     ├── auth/
     │   └── auth.routes.ts
@@ -136,6 +147,9 @@ Layer responsibilities:
 | `src/shared/env.ts` | Cloudflare binding interface for secrets and data source IDs. |
 | `src/shared/auth/*` | PBKDF2 password verifier checks, JWT-compatible token signing/verification, D1-backed active sessions, auth middleware, and auth responses. |
 | `src/shared/notion/notion-client.ts` | Shared Notion data-source query client, Notion API version, common error handling. |
+| `src/shared/notion/notion-schema.ts` | Shared Notion data-source schema metadata and option ID validation helpers. |
+| `src/shared/notion/notion-properties.ts` | Safe Notion page-property builders used by write endpoints. |
+| `src/shared/http/*` | Shared JSON body parsing, HTTP QUERY request parsing, and request validation responses. |
 | `src/shared/pagination/pagination.ts` | Shared public `pageSize`/`cursor` parser and pagination error responses. |
 | `src/features/auth/auth.routes.ts` | Public login route and protected auth status route. |
 | `src/features/jiras/jira.routes.ts` | JIRA HTTP route selection and route-to-filter mapping. |
@@ -174,6 +188,7 @@ Layer responsibilities:
 | `GET` | `/api/jiras/demo-pending` | JIRAs requiring a demo with no demo date. |
 | `GET` | `/api/jiras/demoed` | JIRAs with a demo date. |
 | `GET` | `/api/jiras/:jiraKey` | Single JIRA lookup by JIRA Key, such as `/api/jiras/CRI-1234`. |
+| `QUERY` | `/api/jiras` | JSON-body read query for JIRAs with server-side Notion filtering. |
 | `GET` | `/api/sprints` | All Sprints from the configured Notion data source. |
 | `GET` | `/api/sprints/active` | Active Sprints. |
 | `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
@@ -189,6 +204,10 @@ Layer responsibilities:
 | `GET` | `/api/dashboard` | Aggregate dashboard response with current Sprint, JIRA summaries/lists, recent Work Logs, release summary, feedback summary, and active Work Links. |
 | `GET` | `/api/work-logs` | All Work Logs from the configured Notion data source, sorted by Date descending. |
 | `GET` | `/api/work-logs/appraisal` | Work Logs marked for appraisal. |
+| `GET` | `/api/work-logs/meta` | Dynamic Work Log field metadata from the Notion data-source schema. |
+| `QUERY` | `/api/work-logs` | JSON-body read query for Work Logs with server-side Notion filtering. |
+| `POST` | `/api/work-logs` | Create a Work Log through allow-listed mapped fields. |
+| `PATCH` | `/api/work-logs/:pageId` | Update a Work Log page after page ownership validation. |
 | `GET` | `/api/releases` | All Release Items from the configured Notion data source, sorted by Formal Announced Date descending. |
 | `GET` | `/api/releases/pending` | Release Items formally announced but not yet confirmed. |
 | `GET` | `/api/releases/confirmed` | Release Items with a confirmed release date. |
@@ -197,8 +216,16 @@ Layer responsibilities:
 | `GET` | `/api/feedback/appraisal` | Feedback with appraisal contexts. |
 | `GET` | `/api/feedback/improvement-follow-up` | Feedback marked as improvement or suggestion. |
 | `GET` | `/api/feedback/negative` | Negative Feedback. |
+| `GET` | `/api/feedback/meta` | Dynamic Feedback field metadata from the Notion data-source schema. |
+| `QUERY` | `/api/feedback` | JSON-body read query for Feedback with server-side Notion filtering. |
+| `POST` | `/api/feedback` | Create Feedback through allow-listed mapped fields. |
+| `PATCH` | `/api/feedback/:pageId` | Update a Feedback page after page ownership validation. |
 | `GET` | `/api/work-links` | All Work Links from the configured Notion data source, sorted by Link ascending. |
 | `GET` | `/api/work-links/active` | Active Work Links. |
+| `GET` | `/api/work-links/meta` | Dynamic Work Link field metadata from the Notion data-source schema. |
+| `QUERY` | `/api/work-links` | JSON-body read query for Work Links with server-side Notion filtering. |
+| `POST` | `/api/work-links` | Create a Work Link through allow-listed mapped fields. |
+| `PATCH` | `/api/work-links/:pageId` | Update a Work Link page after page ownership validation. |
 
 All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
@@ -207,6 +234,10 @@ Auth access tokens last 1 hour. While a token is still valid and its backing D1 
 `GET /api/dashboard` supports optional `companyId` and `projectId` query parameters. Release dashboard sections are scoped through matching JIRAs because Release Items do not have a direct Project relation. Project-scoped Dashboard feedback is scoped through the Project's Company relation because Feedback `Project` is a rollup in the live schema.
 
 Selected endpoints support optional shallow relation enrichment with `include=relations`. Existing raw relation ID fields remain unchanged, and default responses are unchanged when `include` is absent.
+
+`QUERY` is supported by `/api/jiras`, `/api/work-logs`, `/api/feedback`, and `/api/work-links` for JSON-body read requests. These endpoints advertise `Accept-Query: application/json`, remain safe/idempotent, and translate domain filters into Notion data-source filters. Clients do not send raw Notion filter JSON.
+
+Write endpoints are intentionally limited to Work Logs, Feedback, and Work Links. They accept only documented mapped fields, validate Notion select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion.
 
 ## API Pagination
 
@@ -399,6 +430,7 @@ curl -s http://localhost:8787/api/teams?companyId=company-page-id -H "Authorizat
 curl -s http://localhost:8787/api/projects?companyId=company-page-id -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/dashboard?projectId=project-page-id -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/work-logs?from=2026-09-01\&to=2026-09-30 -H "Authorization: Bearer $TOKEN" | jq
+curl -s -X QUERY http://localhost:8787/api/work-logs -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"from":"2026-09-01","categories":["Office Work"]},"pageSize":25}' | jq
 curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/work-links/active?type=Documentation -H "Authorization: Bearer $TOKEN" | jq
@@ -441,6 +473,7 @@ Living technical references:
 - [Release API](knowledge-base/release-api.md)
 - [Feedback API](knowledge-base/feedback-api.md)
 - [Work Links API](knowledge-base/work-links-api.md)
+- [HTTP QUERY Method](knowledge-base/http-query-method.md)
 - [Dashboard API](knowledge-base/dashboard-api.md)
 - [Relation Enrichment](knowledge-base/relation-enrichment.md)
 - [Notion Integration](knowledge-base/notion-integration.md)

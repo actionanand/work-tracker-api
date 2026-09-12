@@ -43,7 +43,6 @@ const testEnv: Env = {
 
 const companyId = "11111111-1111-1111-1111-111111111111";
 const compactCompanyId = "11111111111111111111111111111111";
-const projectId = "33333333-3333-3333-3333-333333333333";
 const teamId = "22222222-2222-2222-2222-222222222222";
 
 const dateSort = [{ property: "Date", direction: "descending" }];
@@ -93,13 +92,6 @@ const companyFilter = {
 	property: "Company",
 	relation: {
 		contains: companyId,
-	},
-};
-
-const projectFilter = {
-	property: "Project",
-	relation: {
-		contains: projectId,
 	},
 };
 
@@ -194,14 +186,6 @@ const routeCases = [
 		},
 	},
 	{
-		path: `/api/feedback?projectId=${projectId}`,
-		expectedBody: {
-			page_size: 25,
-			filter: projectFilter,
-			sorts: dateSort,
-		},
-	},
-	{
 		path: `/api/feedback?teamId=${teamId}`,
 		expectedBody: {
 			page_size: 25,
@@ -270,13 +254,12 @@ const routeCases = [
 		},
 	},
 	{
-		path: `/api/feedback?companyId=${companyId}&projectId=${projectId}&teamId=${teamId}&personType=Manager&context=Weekly%20Update&feedbackType=Positive&from=2026-01-01&to=2026-12-31`,
+		path: `/api/feedback?companyId=${companyId}&teamId=${teamId}&personType=Manager&context=Weekly%20Update&feedbackType=Positive&from=2026-01-01&to=2026-12-31`,
 		expectedBody: {
 			page_size: 25,
 			filter: {
 				and: [
 					companyFilter,
-					projectFilter,
 					teamFilter,
 					personTypeFilter,
 					contextFilter,
@@ -316,11 +299,14 @@ const fullFeedbackPage = {
 		Company: {
 			relation: [{ id: companyId }],
 		},
-		Project: {
-			relation: [{ id: projectId }],
-		},
 		Team: {
 			relation: [{ id: teamId }],
+		},
+		"Work Type": {
+			rollup: {
+				type: "array",
+				array: [{ type: "select", select: { name: " Office Work " } }],
+			},
 		},
 		Details: {
 			rich_text: [{ plain_text: "  Delivered the release coordination well.  " }],
@@ -351,8 +337,8 @@ const expectedFeedback = {
 	details: "Delivered the release coordination well.",
 	actionFollowUp: "Share template with the team.",
 	companyIds: [companyId],
-	projectIds: [projectId],
 	teamIds: [teamId],
+	workType: "Office Work",
 };
 
 const expectedDefaultFeedback = {
@@ -368,8 +354,8 @@ const expectedDefaultFeedback = {
 	details: "",
 	actionFollowUp: "",
 	companyIds: [],
-	projectIds: [],
 	teamIds: [],
+	workType: null,
 };
 
 const invalidParameterResponse = (parameter: string) => ({
@@ -463,7 +449,6 @@ describe("Feedback API routes", () => {
 
 	it.each([
 		["companyId", "/api/feedback?companyId=invalid"],
-		["projectId", "/api/feedback?projectId=invalid"],
 		["teamId", "/api/feedback?teamId=invalid"],
 		["from", "/api/feedback?from=2026-99-99"],
 		["to", "/api/feedback?to=not-a-date"],
@@ -479,6 +464,20 @@ describe("Feedback API routes", () => {
 			expect(await response.json()).toEqual(invalidParameterResponse(parameter));
 		},
 	);
+
+	it("returns 400 for stale Feedback projectId filtering without calling Notion", async () => {
+		const fetchMock = stubNotionFetch();
+
+		const response = await fetchWorker("/api/feedback?projectId=invalid");
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid request",
+			field: "projectId",
+			message: "Feedback does not support Project filtering; use companyId or teamId",
+		});
+	});
 
 	it("ignores empty select query parameters consistently", async () => {
 		const fetchMock = stubNotionFetch();

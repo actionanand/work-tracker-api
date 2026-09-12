@@ -211,7 +211,6 @@ export async function enrichReleaseItems(
 
 export type EnrichedFeedback = Feedback & {
 	companies: CompanyRef[];
-	projects: ProjectRef[];
 	teams: TeamRef[];
 };
 
@@ -220,18 +219,15 @@ export async function enrichFeedback(
 	feedback: Feedback[],
 ): Promise<EnrichedFeedback[]> {
 	const companyIds = uniqueIds(feedback.map((item) => item.companyIds));
-	const projectIds = uniqueIds(feedback.map((item) => item.projectIds));
 	const teamIds = uniqueIds(feedback.map((item) => item.teamIds));
-	const [companies, projects, teams] = await Promise.all([
+	const [companies, teams] = await Promise.all([
 		loadCatalogIfNeeded(companyIds, () => loadCompanyCatalog(env)),
-		loadCatalogIfNeeded(projectIds, () => loadProjectCatalog(env)),
 		loadCatalogIfNeeded(teamIds, () => loadTeamCatalog(env)),
 	]);
 
 	return feedback.map((item) => ({
 		...item,
 		companies: resolveRefs(item.companyIds, companies),
-		projects: resolveRefs(item.projectIds, projects),
 		teams: resolveRefs(item.teamIds, teams),
 	}));
 }

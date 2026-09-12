@@ -90,6 +90,7 @@ GET /api/jiras/demoed
 GET /api/jiras/:jiraKey
 GET /api/work-logs
 GET /api/work-logs/appraisal
+QUERY /api/work-logs
 GET /api/releases
 GET /api/releases/pending
 GET /api/releases/confirmed
@@ -98,9 +99,13 @@ GET /api/feedback
 GET /api/feedback/appraisal
 GET /api/feedback/improvement-follow-up
 GET /api/feedback/negative
+QUERY /api/feedback
 GET /api/work-links
 GET /api/work-links/active
+QUERY /api/work-links
 ```
+
+Feedback enrichment includes `companies` and `teams`. Feedback no longer includes `projects` because the live Feedback schema does not have a direct Project relation.
 
 ## Related Docs
 

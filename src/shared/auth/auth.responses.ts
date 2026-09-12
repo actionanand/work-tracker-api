@@ -1,7 +1,8 @@
 const CORS_HEADERS = {
 	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+	"Access-Control-Allow-Methods": "GET, QUERY, POST, PATCH, DELETE, OPTIONS",
 	"Access-Control-Allow-Headers": "Authorization, Content-Type",
+	"Access-Control-Expose-Headers": "Accept-Query",
 };
 
 export function withCorsHeaders(response: Response): Response {
@@ -105,14 +106,44 @@ export function tooManyLoginAttemptsResponse(): Response {
 	);
 }
 
-export function corsPreflightResponse(): Response {
+export function corsPreflightResponse(pathname = ""): Response {
+	const queryCapable = [
+		"/api/work-logs",
+		"/api/feedback",
+		"/api/work-links",
+		"/api/jiras",
+	].includes(pathname);
+	const allow = allowHeaderForPath(pathname);
+
 	return new Response(null, {
 		status: 204,
 		headers: {
 			...CORS_HEADERS,
+			...(allow ? { Allow: allow } : {}),
+			...(queryCapable ? { "Accept-Query": "application/json" } : {}),
 			"Access-Control-Max-Age": "86400",
 		},
 	});
+}
+
+function allowHeaderForPath(pathname: string): string | null {
+	if (pathname === "/api/jiras") {
+		return "GET, QUERY, OPTIONS";
+	}
+
+	if (["/api/work-logs", "/api/feedback", "/api/work-links"].includes(pathname)) {
+		return "GET, QUERY, POST, OPTIONS";
+	}
+
+	if (
+		/^\/api\/work-logs\/[^/]+$/.test(pathname) ||
+		/^\/api\/feedback\/[^/]+$/.test(pathname) ||
+		/^\/api\/work-links\/[^/]+$/.test(pathname)
+	) {
+		return "PATCH, OPTIONS";
+	}
+
+	return null;
 }
 
 export function internalServerErrorResponse(): Response {

@@ -1,6 +1,6 @@
 # Work Log API
 
-This document describes the currently implemented Work Logs read API.
+This document describes the currently implemented Work Logs API.
 
 ## Endpoints
 
@@ -8,6 +8,10 @@ This document describes the currently implemented Work Logs read API.
 | --- | --- | --- |
 | `GET` | `/api/work-logs` | Query Work Logs from the configured Notion Work Logs data source. |
 | `GET` | `/api/work-logs/appraisal` | Query Work Logs where `Appraisal = true`. |
+| `GET` | `/api/work-logs/meta` | Return normalized field metadata from the Notion data-source schema. |
+| `QUERY` | `/api/work-logs` | Query Work Logs with a JSON request body and Notion-side filters. |
+| `POST` | `/api/work-logs` | Create a Work Log through allow-listed mapped fields. |
+| `PATCH` | `/api/work-logs/:pageId` | Update a Work Log after validating the target page belongs to the Work Logs data source. |
 
 Unknown paths such as `/api/work-logs/random` are not handled by `handleWorkLogRoutes()` and fall through to the main Worker 404.
 
@@ -32,6 +36,55 @@ Multiple supported filters are composed with Notion `and`. Filtering is performe
 All Work Log collection endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters change.
 
 Work Logs are sorted by `Date` descending.
+
+## HTTP QUERY
+
+`QUERY /api/work-logs` accepts `Content-Type: application/json` and supports:
+
+```json
+{
+  "filters": {
+    "from": "2026-09-01",
+    "to": "2026-09-30",
+    "projectIds": ["project-page-id"],
+    "jiraIds": ["jira-page-id"],
+    "categories": ["Office Work"],
+    "types": ["Meeting"],
+    "workModes": ["WFO (Office)"],
+    "appraisal": true
+  },
+  "pageSize": 25,
+  "cursor": "opaque-cursor",
+  "includeRelations": false
+}
+```
+
+Multiple values for one field are composed with Notion `or`. Different fields are composed with Notion `and`. Unknown top-level fields or filter names return HTTP 400 before Notion is called.
+
+## Metadata
+
+`GET /api/work-logs/meta` reads the current Notion data-source schema and returns normalized fields, including select option IDs for writable select properties and options endpoint hints for relation fields. This endpoint is intended for clients that need to build safe write forms without hardcoding select option IDs.
+
+## Writes
+
+`POST /api/work-logs` returns HTTP 201 with `{ "data": <mapped-work-log> }`. `PATCH /api/work-logs/:pageId` returns HTTP 200 with the same shape.
+
+Writable fields:
+
+```text
+update
+date
+categoryOptionId
+typeOptionId
+workModeOptionId
+projectId
+jiraIds
+comment
+wentWrong
+appraisal
+```
+
+Select fields require Notion option IDs from `/api/work-logs/meta`; display names are not accepted for writes. Unknown fields and read-only fields return HTTP 400. `PATCH` validates `pageId` as a Notion page ID and checks page ownership before updating.
 
 ## Response Shape
 
@@ -85,10 +138,9 @@ Work Logs are historical daily records and should not be deleted when a Sprint e
 
 The following are not implemented in this feature:
 
-- Work Log create/update/delete APIs
-- `/api/work-logs/:id`
+- Work Log delete APIs
+- `GET /api/work-logs/:id`
 - caching
-- Android authentication
 
 ## Related Docs
 

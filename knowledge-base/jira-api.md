@@ -14,6 +14,7 @@ This document describes the JIRA API functionality currently implemented in the 
 | `GET` | `/api/jiras/demo-pending` | Query JIRAs requiring a demo with no demo date. |
 | `GET` | `/api/jiras/demoed` | Query JIRAs with a demo date. |
 | `GET` | `/api/jiras/:jiraKey` | Query one JIRA by its `JIRA Key` title property. |
+| `QUERY` | `/api/jiras` | Query JIRAs with a JSON request body and Notion-side filters. |
 
 Static JIRA routes are matched before dynamic JIRA key lookup. Unknown paths such as `/api/jiras/random` are not handled by `handleJiraRoutes()` and fall through to the main Worker 404.
 
@@ -61,6 +62,30 @@ Filtering is performed in the Notion data-source query request, not by filtering
 | `/api/jiras/:jiraKey` | `JIRA Key = :jiraKey` |
 
 `In Active Sprint` and `Spillover` are Notion formula values returning booleans.
+
+## HTTP QUERY
+
+`QUERY /api/jiras` accepts `Content-Type: application/json` and supports:
+
+```json
+{
+  "filters": {
+    "statuses": ["In progress", "Cancelled"],
+    "tags": ["api"],
+    "sprintIds": ["sprint-page-id"],
+    "inActiveSprint": true,
+    "spillover": false,
+    "appraisal": true,
+    "demoRequired": false,
+    "q": "CRI-1234"
+  },
+  "pageSize": 25,
+  "cursor": "opaque-cursor",
+  "includeRelations": false
+}
+```
+
+Multiple values for one field are composed with Notion `or`. Different fields are composed with Notion `and`. Unknown top-level fields or filter names return HTTP 400 before Notion is called. `sprintIds` must contain valid Notion page IDs.
 
 ## Mapped JIRA Fields
 
@@ -176,6 +201,7 @@ Current tests cover:
 - enriched JIRA detail Sprint history and spill events
 - JIRA detail Sprint Allocation query pagination
 - no Sprint Allocation query for JIRA list routes
+- HTTP QUERY request-body filters
 - unknown JIRA path fallthrough behavior
 
 Do not hardcode current sample test records as assumptions about production data.

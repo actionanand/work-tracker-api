@@ -81,6 +81,68 @@ export const jiraFilters = {
 			contains: sprintId,
 		},
 	}),
+	status: (status: string): NotionQueryFilter => ({
+		property: "Status",
+		status: {
+			equals: status,
+		},
+	}),
+	statuses: (statuses: string[]): NotionQueryFilter | undefined =>
+		orFilters(statuses.map((status) => jiraFilters.status(status))),
+	tag: (tag: string): NotionQueryFilter => ({
+		property: "Tags",
+		multi_select: {
+			contains: tag,
+		},
+	}),
+	tags: (tags: string[]): NotionQueryFilter | undefined =>
+		orFilters(tags.map((tag) => jiraFilters.tag(tag))),
+	sprints: (sprintIds: string[]): NotionQueryFilter | undefined =>
+		orFilters(sprintIds.map((sprintId) => jiraFilters.sprint(sprintId))),
+	inActiveSprintValue: (inActiveSprint: boolean): NotionQueryFilter => ({
+		property: "In Active Sprint",
+		formula: {
+			checkbox: {
+				equals: inActiveSprint,
+			},
+		},
+	}),
+	spilloverValue: (spillover: boolean): NotionQueryFilter => ({
+		property: "Spillover",
+		formula: {
+			checkbox: {
+				equals: spillover,
+			},
+		},
+	}),
+	appraisalValue: (appraisal: boolean): NotionQueryFilter => ({
+		property: "Appraisal",
+		checkbox: {
+			equals: appraisal,
+		},
+	}),
+	demoRequiredValue: (demoRequired: boolean): NotionQueryFilter => ({
+		property: "Demo Required",
+		checkbox: {
+			equals: demoRequired,
+		},
+	}),
+	query: (query: string): NotionQueryFilter => ({
+		or: [
+			{
+				property: "JIRA Key",
+				title: {
+					contains: query,
+				},
+			},
+			{
+				property: "Summary",
+				rich_text: {
+					contains: query,
+				},
+			},
+		],
+	}),
 	projects: (projectIds: string[]): NotionQueryFilter | undefined => {
 		const filters = projectIds.map((projectId) => jiraFilters.project(projectId));
 
@@ -100,8 +162,23 @@ export const jiraFilters = {
 	string,
 	| NotionQueryFilter
 	| ((value: string) => NotionQueryFilter)
+	| ((value: boolean) => NotionQueryFilter)
 	| ((values: string[]) => NotionQueryFilter | undefined)
 >;
+
+function orFilters(filters: NotionQueryFilter[]): NotionQueryFilter | undefined {
+	if (filters.length === 0) {
+		return undefined;
+	}
+
+	if (filters.length === 1) {
+		return filters[0];
+	}
+
+	return {
+		or: filters,
+	};
+}
 
 export function combineJiraFilters(
 	filters: Array<NotionQueryFilter | undefined>,

@@ -1,6 +1,6 @@
 # Work Links API
 
-This document describes the currently implemented Work Links read API.
+This document describes the currently implemented Work Links API.
 
 ## Endpoints
 
@@ -8,6 +8,10 @@ This document describes the currently implemented Work Links read API.
 | --- | --- | --- |
 | `GET` | `/api/work-links` | Query all Work Links from the configured Notion Work Links data source. |
 | `GET` | `/api/work-links/active` | Query active Work Links. |
+| `GET` | `/api/work-links/meta` | Return normalized field metadata from the Notion data-source schema. |
+| `QUERY` | `/api/work-links` | Query Work Links with a JSON request body and Notion-side filters. |
+| `POST` | `/api/work-links` | Create a Work Link through allow-listed mapped fields. |
+| `PATCH` | `/api/work-links/:pageId` | Update a Work Link after validating the target page belongs to the Work Links data source. |
 
 Unknown paths such as `/api/work-links/random` or `/api/work-links/foo/bar` are not handled by `handleWorkLinkRoutes()` and fall through to the main Worker 404.
 
@@ -31,6 +35,49 @@ Multiple supported filters are composed with Notion `and`. Filtering is performe
 Work Link collection endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters or views change.
 
 Work Links are sorted by `Link` ascending using the Notion query API.
+
+## HTTP QUERY
+
+`QUERY /api/work-links` accepts `Content-Type: application/json` and supports:
+
+```json
+{
+  "filters": {
+    "companyIds": ["company-page-id"],
+    "projectIds": ["project-page-id"],
+    "types": ["Documentation"],
+    "active": true,
+    "q": "github"
+  },
+  "pageSize": 25,
+  "cursor": "opaque-cursor",
+  "includeRelations": false
+}
+```
+
+Multiple values for one field are composed with Notion `or`. Different fields are composed with Notion `and`. Unknown top-level fields or filter names return HTTP 400 before Notion is called.
+
+## Metadata
+
+`GET /api/work-links/meta` reads the current Notion data-source schema and returns normalized field metadata, including Type select option IDs and options endpoint hints for Company and Project relations.
+
+## Writes
+
+`POST /api/work-links` returns HTTP 201 with `{ "data": <mapped-work-link> }`. `PATCH /api/work-links/:pageId` returns HTTP 200 with the same shape.
+
+Writable fields:
+
+```text
+link
+typeOptionId
+url
+companyId
+projectId
+notes
+active
+```
+
+`typeOptionId` requires a Notion option ID from `/api/work-links/meta`; display names are not accepted for writes. Unknown fields and read-only fields return HTTP 400. `url`, when provided, must be a valid URL. `PATCH` validates `pageId` as a Notion page ID and checks page ownership before updating.
 
 ## Response Shape
 
@@ -72,13 +119,10 @@ When `include=relations` is supplied, Work Link endpoints also include shallow `
 
 The following are not implemented in this feature:
 
-- Work Link create/update/delete APIs
-- `/api/work-links/:id`
-- nested Company/Project objects
-- Dashboard API
+- Work Link delete APIs
+- `GET /api/work-links/:id`
+- nested Company/Project objects outside `include=relations`
 - caching
-- Android authentication
-- Notion write APIs
 
 ## Related Docs
 

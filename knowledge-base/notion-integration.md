@@ -22,7 +22,7 @@ It is defined in `src/shared/notion/notion-client.ts`.
 
 ## Querying Approach
 
-The Worker currently queries Notion data sources with:
+The Worker queries Notion data sources with:
 
 ```http
 POST /v1/data_sources/{data_source_id}/query
@@ -60,11 +60,11 @@ env.NOTION_TOKEN
 
 ## Request Body
 
-The shared Notion client currently sends:
+For public list endpoints, the shared Notion client sends:
 
 ```json
 {
-  "page_size": 100
+  "page_size": 25
 }
 ```
 
@@ -72,18 +72,41 @@ For filtered endpoints, it adds a `filter` object:
 
 ```json
 {
-  "page_size": 100,
+  "page_size": 25,
   "filter": {}
 }
 ```
 
 The actual filter object is defined in the relevant feature's `*.filters.ts` file.
 
+For supported `QUERY` endpoints, clients send domain filters in a JSON request body. The Worker validates those fields and translates them to Notion filter JSON; clients do not send raw Notion filters.
+
+## Data Source Schema Reads
+
+Metadata endpoints and write endpoints read Notion data-source schemas with:
+
+```http
+GET /v1/data_sources/{data_source_id}
+```
+
+Metadata endpoints normalize writable fields and select option IDs for clients. Write endpoints validate submitted option IDs against the current schema before creating or updating pages.
+
+## Page Writes
+
+Selected resources create and update Notion pages through:
+
+```http
+POST /v1/pages
+PATCH /v1/pages/{page_id}
+```
+
+The Worker builds Notion page properties from allow-listed API fields. It does not forward arbitrary client JSON. `PATCH` first retrieves the target page and verifies that it belongs to the expected data source before sending an update.
+
 ## Relation Properties
 
 Notion relation properties often return related page IDs rather than human-readable titles. The current JIRA mapper returns those IDs directly as arrays such as `sprintIds` and `projectIds`.
 
-Resolving relation names would require additional Notion lookups. That is intentionally deferred.
+Selected endpoints can resolve shallow relation names with `include=relations`; otherwise relation IDs remain raw Notion page IDs.
 
 ## Why Mapping Happens in the Worker
 
@@ -110,10 +133,15 @@ hasMore
 nextCursor
 ```
 
-The current client sends `page_size: 100`. Future pagination work may add cursor parameters to API endpoints, but that is not implemented yet.
+List endpoints support `pageSize` and `cursor` parameters. `pageSize` defaults to `25` and maxes at `100`. Cursors are opaque Notion cursors and are passed through as `nextCursor`.
+
+## CORS And QUERY
+
+Preflight responses include `QUERY` in `Access-Control-Allow-Methods`. Resources that support HTTP QUERY return `Accept-Query: application/json`.
 
 ## Related Docs
 
 - [JIRA API](jira-api.md)
+- [HTTP QUERY Method](http-query-method.md)
 - [Environment Variables and Secrets](../documentation/03-environment-variables-and-secrets.md)
 - [Security](../documentation/07-security.md)
