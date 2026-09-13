@@ -23,7 +23,7 @@ Lists return `article`, `category`, `tags`, `createdTime`, and `lastEditedTime` 
 
 ## Import Rules
 
-Imports use `multipart/form-data` with a required `file` field and optional `article`, `categoryOptionId`, and repeatable `tagOptionIds` fields. If `article` is omitted, the sanitized filename stem is used. Category and Tag IDs must come from `/api/reference-library/meta` and are validated against the live Notion schema.
+Imports use `multipart/form-data` with a required `file` field and optional `title`, `categoryOptionId`, and repeatable `tagOptionIds` fields. If `title` is omitted, the sanitized filename stem is used. Category and Tag IDs must come from `/api/reference-library/meta` and are validated against the live Notion schema.
 
 Files must be non-empty `.md` or `.markdown` files no larger than `4,500,000` bytes. Markdown is sent unchanged to Notion, including Mermaid fences and LaTeX/math syntax. If Notion accepts creation asynchronously, the API returns HTTP 202 with `taskId` and `pollAfterSeconds`.
 

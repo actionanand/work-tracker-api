@@ -863,7 +863,7 @@ describe("Productivity and Reference Library APIs", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it("reads owned Reference Library markdown and safely normalizes empty blocks", async () => {
+	it("reads owned Reference Library markdown and safely normalizes Notion output", async () => {
 		const outsiderPageId = "77777777-7777-7777-7777-777777777777";
 		const markdown = [
 			"## Angular 22",
@@ -873,15 +873,19 @@ describe("Productivity and Reference Library APIs", () => {
 			"```mermaid",
 			"flowchart TD",
 			"    A[Start] --> B[End]",
+			"    B --> C[$`f(x)`$]",
 			"<empty-block/>",
 			"```",
 			"",
 			"~~~text",
+			"$`inside fence`$",
 			"<empty-block/>",
 			"~~~",
 			"",
 			"Inline `<empty-block/>` remains literal.",
 			"",
+			"Inline equations: $`E = mc^2`$ and $`a + b`$.",
+			"Ordinary equation: $x^2$.",
 			"$$E = mc^2$$",
 			"<unknown id=\"block-id\"/>",
 		].join("\n");
@@ -918,9 +922,13 @@ describe("Productivity and Reference Library APIs", () => {
 			tags: ["Angular", "Technical"],
 		});
 		expect(body.markdown).toContain("```mermaid\nflowchart TD");
-		expect(body.markdown).toContain("```mermaid\nflowchart TD\n    A[Start] --> B[End]\n<empty-block/>\n```");
-		expect(body.markdown).toContain("~~~text\n<empty-block/>\n~~~");
+		expect(body.markdown).toContain(
+			"```mermaid\nflowchart TD\n    A[Start] --> B[End]\n    B --> C[$`f(x)`$]\n<empty-block/>\n```",
+		);
+		expect(body.markdown).toContain("~~~text\n$`inside fence`$\n<empty-block/>\n~~~");
 		expect(body.markdown).toContain("Inline `<empty-block/>` remains literal.");
+		expect(body.markdown).toContain("Inline equations: $E = mc^2$ and $a + b$.");
+		expect(body.markdown).toContain("Ordinary equation: $x^2$.");
 		expect(body.markdown).toContain("$$E = mc^2$$");
 		expect(body.markdown).toContain("<unknown id=\"block-id\"/>");
 		expect(body.markdown).not.toContain("<empty-block/> \t");
@@ -971,7 +979,7 @@ describe("Productivity and Reference Library APIs", () => {
 		const markdown = "# Angular Signal\n\n```mermaid\nflowchart TD\nA --> B\n```\n\n$$x^2$$";
 		const formData = new FormData();
 		formData.set("file", new File([markdown], "angular-signal.md", { type: "text/markdown" }));
-		formData.set("article", "Angular Signal");
+		formData.set("title", " \u0000Angular Signal\u007f ");
 		formData.set("categoryOptionId", "category-official");
 		formData.append("tagOptionIds", "tag-angular");
 		formData.append("tagOptionIds", "tag-technical");
@@ -1013,6 +1021,97 @@ describe("Productivity and Reference Library APIs", () => {
 			pageId: referencePageId,
 			failed: false,
 		});
+	});
+
+	it("falls back to the sanitized filename when import title is omitted", async () => {
+		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+			if (url.endsWith("/v1/pages") && init?.method === "POST") {
+				return Promise.resolve(
+					Response.json(
+						referenceLibraryPage({
+							properties: {
+								Article: { title: [{ plain_text: "fallback-title" }] },
+								Category: { select: null },
+								Tags: { multi_select: [] },
+							},
+						}),
+					),
+				);
+			}
+			return Promise.resolve(Response.json({}));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const formData = new FormData();
+		formData.set(
+			"file",
+			new File(["# Fallback"], "fallback-title.markdown", {
+				type: "text/markdown",
+			}),
+		);
+
+		const response = await fetchWorker("/api/reference-library/import", {
+			method: "POST",
+			body: formData,
+		});
+		const importBody = JSON.parse(
+			String(
+				fetchMock.mock.calls.find(
+					([url, init]) =>
+						String(url).endsWith("/v1/pages") && init?.method === "POST",
+				)?.[1]?.body,
+			),
+		);
+
+		expect(response.status).toBe(201);
+		expect(importBody.properties.Article).toEqual({
+			title: [{ text: { content: "fallback-title" } }],
+		});
+	});
+
+	it("rejects an explicitly supplied title that is blank after sanitization", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const formData = new FormData();
+		formData.set("file", new File(["# Article"], "article.md"));
+		formData.set("title", " \u0000\t\u007f ");
+
+		const response = await fetchWorker("/api/reference-library/import", {
+			method: "POST",
+			body: formData,
+		});
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid request",
+			field: "title",
+			message: "Expected a non-empty string",
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("still rejects unknown Reference Library multipart fields", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const formData = new FormData();
+		formData.set("file", new File(["# Article"], "article.md"));
+		formData.set("title", "Article");
+		formData.set("unexpected", "value");
+
+		const response = await fetchWorker("/api/reference-library/import", {
+			method: "POST",
+			body: formData,
+		});
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid request",
+			field: "unexpected",
+			message: "Unknown field",
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it("rejects unknown Reference Library import options before creating a page", async () => {

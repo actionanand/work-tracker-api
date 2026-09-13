@@ -3,7 +3,6 @@ import {
 	invalidOption,
 	invalidRequest,
 	parseOptionIdValue,
-	parseStringValue,
 } from "../../shared/http/validation";
 import type {
 	NotionQueryError,
@@ -42,7 +41,7 @@ import { normalizeReferenceMarkdownForDisplay } from "./reference-library.markdo
 const MAX_MARKDOWN_UPLOAD_BYTES = 4_500_000;
 const REFERENCE_IMPORT_FIELDS = new Set([
 	"file",
-	"article",
+	"title",
 	"categoryOptionId",
 	"tagOptionIds",
 ]);
@@ -159,7 +158,7 @@ export async function importReferenceMarkdown(
 		);
 	}
 
-	const article = parseArticle(formData.get("article"), file.name);
+	const article = parseImportTitle(formData.get("title"), file.name);
 	const categoryOptionId = parseImportOption(
 		formData.get("categoryOptionId"),
 		"categoryOptionId",
@@ -287,18 +286,22 @@ function validateImportFields(formData: FormData): void {
 	}
 }
 
-function parseArticle(value: string | File | null, filename: string): string {
+function parseImportTitle(value: string | File | null, filename: string): string {
+	if (value === null) {
+		return titleFromFilename(filename);
+	}
+
 	if (value instanceof File) {
-		throw validationError(invalidRequest("Expected a string", "article"));
+		throw validationError(invalidRequest("Expected a string", "title"));
 	}
 
-	const article = parseStringValue(value ?? undefined, "article");
-	if (article instanceof Response) throw validationError(article);
-	if (article !== undefined && !article) {
-		throw validationError(invalidRequest("Expected a non-empty string", "article"));
+	const title = sanitizeTitle(value);
+
+	if (!title) {
+		throw validationError(invalidRequest("Expected a non-empty string", "title"));
 	}
 
-	return article ?? titleFromFilename(filename);
+	return title;
 }
 
 function parseImportOption(
@@ -340,9 +343,13 @@ function isNotionNotFound(error: unknown): boolean {
 function titleFromFilename(filename: string): string {
 	const base = filename.split(/[\\/]/).pop() ?? "";
 	const stem = base.replace(/\.(md|markdown)$/i, "");
-	const title = stem.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+	const title = sanitizeTitle(stem);
 
 	return title || "Untitled";
+}
+
+function sanitizeTitle(value: string): string {
+	return value.replace(/[\u0000-\u001f\u007f]/g, "").trim();
 }
 
 function normalizeAsyncStatus(status: string | undefined): string {

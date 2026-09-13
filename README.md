@@ -189,6 +189,8 @@ Layer responsibilities:
 | `POST` | `/api/auth/sessions/logout-others` | Protected route that revokes all active current-user sessions except the current one. |
 | `POST` | `/api/auth/logout` | Protected route that revokes the current session. |
 | `GET` | `/api/jiras` | All JIRAs from the configured Notion data source. |
+| `GET` | `/api/jiras/meta` | Live metadata for the deliberately limited JIRA create form. |
+| `POST` | `/api/jiras` | Create a simple JIRA through allow-listed fields. |
 | `GET` | `/api/jiras/active` | JIRAs in the active sprint. |
 | `GET` | `/api/jiras/blocked` | Active sprint JIRAs with `Status = Blocked`. |
 | `GET` | `/api/jiras/spillovers` | Active sprint JIRAs marked as spillovers. |
@@ -261,7 +263,7 @@ Layer responsibilities:
 | `GET` | `/api/reference-library` | Paginated article rows from the configured Reference Library data source. |
 | `QUERY` | `/api/reference-library` | JSON-body article query with Notion-side Category, Tags, and title filtering. |
 | `GET` | `/api/reference-library/:pageId` | Single owned article detail with metadata and page-body Markdown. |
-| `POST` | `/api/reference-library/import` | Import a `.md` or `.markdown` file with optional article metadata. |
+| `POST` | `/api/reference-library/import` | Import a `.md` or `.markdown` file with optional title, Category, and Tag metadata. |
 | `GET` | `/api/reference-library/imports/:taskId` | Poll a Notion async markdown import task. |
 
 All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
@@ -466,6 +468,7 @@ TOKEN=$(curl -s http://localhost:8787/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"password":"your_work_tracker_password_here"}' | jq -r .accessToken)
 curl -s http://localhost:8787/api/jiras -H "Authorization: Bearer $TOKEN" | jq
+curl -s http://localhost:8787/api/jiras/meta -H "Authorization: Bearer $TOKEN" | jq
 curl -s -X POST http://localhost:8787/api/auth/renew -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/auth/sessions -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/jiras/blocked -H "Authorization: Bearer $TOKEN" | jq
@@ -484,6 +487,7 @@ curl -s http://localhost:8787/api/work-links/active?type=Documentation -H "Autho
 curl -s http://localhost:8787/api/jiras/CRI-1234?include=relations -H "Authorization: Bearer $TOKEN" | jq
 curl -s -X QUERY http://localhost:8787/api/jiras/options -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{},"pageSize":20}' | jq
 curl -s -X QUERY http://localhost:8787/api/jiras/options -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"q":"CRI-"},"pageSize":20}' | jq
+curl -s -X POST http://localhost:8787/api/jiras -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"jiraKey":"LSC-99999","summary":"Temporary API JIRA","projectId":null,"statusOptionId":null,"inActiveSprint":false,"tagOptionIds":[],"demoRequired":false,"appraisal":false}' | jq
 curl -s -X QUERY http://localhost:8787/api/todos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"statuses":["In progress"],"dueOnOrBefore":"2026-09-30"}}' | jq
 curl -s -X QUERY http://localhost:8787/api/tasks -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"priorities":["High"],"companyIds":["company-page-id"]},"includeRelations":true}' | jq
 curl -s -X QUERY http://localhost:8787/api/memos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"tags":["api"],"pinned":true}}' | jq

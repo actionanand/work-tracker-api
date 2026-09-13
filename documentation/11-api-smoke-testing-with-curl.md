@@ -1253,7 +1253,7 @@ curl -i -X POST \
   "$API_BASE/api/reference-library/import" \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@/tmp/reference-api-smoke-test.md;type=text/markdown" \
-  -F "article=Reference Library Smoke Test" \
+  -F "title=Reference Library Smoke Test" \
   -F "categoryOptionId=$REFERENCE_CATEGORY_OPTION_ID" \
   -F "tagOptionIds=$REFERENCE_TAG_OPTION_ID"
 ```
@@ -1392,8 +1392,43 @@ curl -sS -X QUERY \
   --data '{
     "filters": {},
     "pageSize": 25
+}' | jq
+```
+
+JIRA create metadata:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE/api/jiras/meta" | jq
+```
+
+The metadata response supplies live Status and Tag option IDs. Project choices can be read from `GET /api/projects/active`.
+
+Create a simple JIRA:
+
+> This creates a real Notion JIRA row. Use a temporary, unique JIRA key and remove the row manually after testing.
+
+```bash
+curl -sS -X POST \
+  "$API_BASE/api/jiras" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "jiraKey": "LSC-99999",
+    "summary": "Temporary API smoke-test JIRA",
+    "projectId": null,
+    "statusOptionId": null,
+    "inActiveSprint": false,
+    "tagOptionIds": [],
+    "demoRequired": false,
+    "appraisal": false
   }' | jq
 ```
+
+To test live Status or Tags, replace the nullable/empty values with IDs returned by `/api/jiras/meta`. To test Project ownership, use an ID returned by `/api/projects/active`.
+
+Repeat with a second unique key and `"inActiveSprint": true`. Verify in Notion that its `Sprints` relation contains the one current active Sprint, the `In Active Sprint` formula evaluates to true, and no Sprint Allocation row was created. Reusing either temporary key should return HTTP 409 without creating another row.
 
 ---
 

@@ -218,7 +218,7 @@ describe("QUERY, write, and metadata API support", () => {
 		["/api/work-logs", "GET, QUERY, POST, OPTIONS"],
 		["/api/feedback", "GET, QUERY, POST, OPTIONS"],
 		["/api/work-links", "GET, QUERY, POST, OPTIONS"],
-		["/api/jiras", "GET, QUERY, OPTIONS"],
+		["/api/jiras", "GET, QUERY, POST, OPTIONS"],
 	])(
 		"advertises accurate QUERY support on CORS preflight for %s",
 		async (path, allow) => {

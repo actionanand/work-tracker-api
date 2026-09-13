@@ -7,6 +7,8 @@ This document describes the JIRA API functionality currently implemented in the 
 | Method | Path | Behavior |
 | --- | --- | --- |
 | `GET` | `/api/jiras` | Query all JIRAs from the Notion JIRAs data source. |
+| `GET` | `/api/jiras/meta` | Return live metadata for simple JIRA creation. |
+| `POST` | `/api/jiras` | Create a simple JIRA through allow-listed API fields. |
 | `GET` | `/api/jiras/active` | Query active sprint JIRAs. |
 | `GET` | `/api/jiras/blocked` | Query active sprint JIRAs with blocked status. |
 | `GET` | `/api/jiras/spillovers` | Query active sprint spillover JIRAs. |
@@ -47,6 +49,33 @@ If no matching JIRA exists, the endpoint returns:
 with HTTP 404.
 
 If Notion returns more than one row for the same JIRA Key, the endpoint returns HTTP 500 instead of silently choosing one row.
+
+## Simple Create API
+
+JIRA writes are deliberately create-only. `POST /api/jiras` accepts exactly:
+
+```json
+{
+  "jiraKey": "LSC-12345",
+  "summary": "Short summary",
+  "projectId": null,
+  "statusOptionId": null,
+  "inActiveSprint": false,
+  "tagOptionIds": [],
+  "demoRequired": false,
+  "appraisal": false
+}
+```
+
+`jiraKey` and `summary` are required, trimmed strings. JIRA keys must match `^[A-Za-z][A-Za-z0-9]+-\d+$`. The boolean fields require JSON booleans and default to `false`; tags default to an empty array. `projectId` and `statusOptionId` are nullable.
+
+The Worker queries Notion for an exact JIRA-key match before creation. An existing key returns HTTP 409 with `{ "error": "JIRA already exists", "field": "jiraKey" }`. A non-null Project must be a valid Notion page ID belonging to the configured Projects data source. Status and Tag option IDs are validated against the live JIRA schema; clients obtain those IDs from `GET /api/jiras/meta`.
+
+`inActiveSprint` is a synthetic create-time field. When true, the Worker queries at most two active Sprints and writes the single result to the `Sprints` relation. Zero active Sprints returns HTTP 409 `No active Sprint is configured`; multiple active Sprints returns HTTP 409 `Multiple active Sprints are configured`. The `In Active Sprint` formula is never written directly.
+
+Simple creation does not create a Sprint Allocation. `PATCH`, `DELETE`, and bulk delete are intentionally unsupported for JIRAs; complex changes continue to be made in Notion.
+
+`GET /api/jiras/meta` exposes only `jiraKey`, `summary`, `projectId`, `statusOptionId`, `inActiveSprint`, `tagOptionIds`, `demoRequired`, and `appraisal`. Project metadata points to `/api/projects/active`, and Status and Tag options come from the live Notion data-source schema.
 
 ## Filter Semantics
 
@@ -247,6 +276,9 @@ Current tests cover:
 - HTTP QUERY request-body filters
 - lightweight JIRA picker options route
 - unknown JIRA path fallthrough behavior
+- simple-create metadata and live options
+- create payload mapping, defaults, Project ownership, and option validation
+- duplicate-key and active-Sprint conflict handling
 
 Do not hardcode current sample test records as assumptions about production data.
 

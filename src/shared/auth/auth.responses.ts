@@ -133,7 +133,11 @@ export function corsPreflightResponse(pathname = ""): Response {
 
 function allowHeaderForPath(pathname: string): string | null {
 	if (pathname === "/api/jiras") {
-		return "GET, QUERY, OPTIONS";
+		return "GET, QUERY, POST, OPTIONS";
+	}
+
+	if (pathname === "/api/jiras/meta") {
+		return "GET, OPTIONS";
 	}
 
 	if (pathname === "/api/jiras/options") {

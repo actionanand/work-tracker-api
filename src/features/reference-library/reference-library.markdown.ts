@@ -23,10 +23,32 @@ export function normalizeReferenceMarkdownForDisplay(markdown: string): string {
 
 		if (/^[\t ]*<empty-block\/>[\t ]*$/.test(line)) {
 			parts[index] = "";
+			continue;
 		}
+
+		parts[index] = normalizeNotionInlineEquations(line);
 	}
 
 	return parts.join("");
+}
+
+function normalizeNotionInlineEquations(line: string): string {
+	let normalized = "";
+	let cursor = 0;
+
+	while (cursor < line.length) {
+		const opening = line.indexOf("$`", cursor);
+		if (opening === -1) return normalized + line.slice(cursor);
+
+		const closing = line.indexOf("`$", opening + 2);
+		if (closing === -1) return normalized + line.slice(cursor);
+
+		normalized += line.slice(cursor, opening);
+		normalized += `$${line.slice(opening + 2, closing)}$`;
+		cursor = closing + 2;
+	}
+
+	return normalized;
 }
 
 function parseOpeningFence(line: string): FenceState | null {
