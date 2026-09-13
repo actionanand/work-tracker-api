@@ -174,7 +174,7 @@ Layer responsibilities:
 | `src/features/todos/*` | To Do routes, filters, service orchestration, and mapping. |
 | `src/features/tasks/*` | Task and follow-up routes, filters, service orchestration, and mapping. |
 | `src/features/memos/*` | Memo routes, filters, service orchestration, metadata mapping, and page-body markdown handling. |
-| `src/features/reference-library/*` | Reference Library child-page listing, detail markdown reads, markdown import, and async import polling. |
+| `src/features/reference-library/*` | Reference Library data-source listing, filtering, detail Markdown reads, metadata-aware import, and async import polling. |
 
 ## API Endpoints
 
@@ -257,9 +257,11 @@ Layer responsibilities:
 | `PATCH` | `/api/memos/:pageId` | Update Memo properties and optional page-body markdown after ownership validation. |
 | `DELETE` | `/api/memos/:pageId` | Move a Memo page to Notion trash after page ownership validation. |
 | `POST` | `/api/memos/bulk-delete` | Move a validated batch of Memo pages to Notion trash. |
-| `GET` | `/api/reference-library` | Direct child pages under the configured Reference Library Notion parent page. |
-| `GET` | `/api/reference-library/:pageId` | Single direct child page detail with markdown. |
-| `POST` | `/api/reference-library/import` | Import a `.md` or `.markdown` file as a normal child page. |
+| `GET` | `/api/reference-library/meta` | Dynamic article field metadata and Category/Tags option IDs. |
+| `GET` | `/api/reference-library` | Paginated article rows from the configured Reference Library data source. |
+| `QUERY` | `/api/reference-library` | JSON-body article query with Notion-side Category, Tags, and title filtering. |
+| `GET` | `/api/reference-library/:pageId` | Single owned article detail with metadata and page-body Markdown. |
+| `POST` | `/api/reference-library/import` | Import a `.md` or `.markdown` file with optional article metadata. |
 | `GET` | `/api/reference-library/imports/:taskId` | Poll a Notion async markdown import task. |
 
 All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
@@ -270,7 +272,7 @@ Auth access tokens last 1 hour. While a token is still valid and its backing D1 
 
 Selected endpoints support optional shallow relation enrichment with `include=relations`. Existing raw relation ID fields remain unchanged, and default responses are unchanged when `include` is absent.
 
-`QUERY` is supported by `/api/jiras`, `/api/jiras/options`, `/api/work-logs`, `/api/feedback`, `/api/work-links`, `/api/todos`, `/api/tasks`, and `/api/memos` for JSON-body read requests. These endpoints advertise `Accept-Query: application/json`, remain safe/idempotent, and translate domain filters into Notion data-source filters. Clients do not send raw Notion filter JSON. Metadata endpoints and Reference Library endpoints do not advertise `Accept-Query`.
+`QUERY` is supported by `/api/jiras`, `/api/jiras/options`, `/api/work-logs`, `/api/feedback`, `/api/work-links`, `/api/todos`, `/api/tasks`, `/api/memos`, and `/api/reference-library` for JSON-body read requests. These endpoints advertise `Accept-Query: application/json`, remain safe/idempotent, and translate domain filters into Notion data-source filters. Clients do not send raw Notion filter JSON. Metadata and item-detail endpoints do not advertise `Accept-Query`.
 
 `QUERY /api/jiras/options` is a lightweight picker endpoint. With no `q`, or an empty/whitespace `q`, it returns only current active-sprint JIRAs. With a non-empty `q`, it searches all JIRAs by `JIRA Key` or `Summary`, including historical and non-sprint JIRAs. It returns only `id`, `jiraKey`, `summary`, `status`, and `inActiveSprint`.
 
@@ -341,7 +343,7 @@ JIRA list responses use this structure:
 - Notion To Dos Data Source ID
 - Notion Tasks Data Source ID
 - Notion Memos Data Source ID
-- Notion Reference Library Page ID
+- Notion Reference Library Data Source ID
 
 ## Setup
 
@@ -397,7 +399,7 @@ Configure non-secret IDs in `wrangler.jsonc`:
   "TODOS_DATA_SOURCE_ID": "your-todos-data-source-id",
   "TASKS_DATA_SOURCE_ID": "your-tasks-data-source-id",
   "MEMOS_DATA_SOURCE_ID": "your-memos-data-source-id",
-  "REFERENCE_LIBRARY_PAGE_ID": "your-reference-library-page-id",
+  "REFERENCE_LIBRARY_DATA_SOURCE_ID": "your-reference-library-source-id",
   "AUTH_PASSWORD_ITERATIONS": "100000",
   "AUTH_TOKEN_TTL_SECONDS": "3600",
   "AUTH_RENEW_WINDOW_SECONDS": "900",
@@ -486,6 +488,7 @@ curl -s -X QUERY http://localhost:8787/api/todos -H "Authorization: Bearer $TOKE
 curl -s -X QUERY http://localhost:8787/api/tasks -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"priorities":["High"],"companyIds":["company-page-id"]},"includeRelations":true}' | jq
 curl -s -X QUERY http://localhost:8787/api/memos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"tags":["api"],"pinned":true}}' | jq
 curl -s http://localhost:8787/api/reference-library -H "Authorization: Bearer $TOKEN" | jq
+curl -s -X QUERY http://localhost:8787/api/reference-library -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"categories":["Official"],"tags":["Angular"],"q":"signal"}}' | jq
 ```
 
 `jq` is only used to pretty-print JSON in the terminal. It is not a Worker dependency.

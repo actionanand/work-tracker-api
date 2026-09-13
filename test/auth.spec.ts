@@ -82,7 +82,7 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
 	TODOS_DATA_SOURCE_ID: "test-todos-data-source-id",
 	TASKS_DATA_SOURCE_ID: "test-tasks-data-source-id",
 	MEMOS_DATA_SOURCE_ID: "test-memos-data-source-id",
-	REFERENCE_LIBRARY_PAGE_ID: "test-reference-library-page-id",
+	REFERENCE_LIBRARY_DATA_SOURCE_ID: "test-reference-library-data-source-id",
 		...overrides,
 	};
 }

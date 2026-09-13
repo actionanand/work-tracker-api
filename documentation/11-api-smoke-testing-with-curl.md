@@ -1160,11 +1160,15 @@ Do not reuse a cursor after changing:
 
 # 17. Reference Library smoke tests
 
-Reference Library is a normal Notion parent page, not a data source.
+Reference Library articles are rows in the configured Notion data source. Article content remains in each row's page body as Markdown.
 
-## List direct child pages
+## Read metadata and list articles
 
 ```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE/api/reference-library/meta" | jq
+
 curl -sS \
   -H "Authorization: Bearer $TOKEN" \
   "$API_BASE/api/reference-library?pageSize=25" | jq
@@ -1201,7 +1205,7 @@ curl -sS \
 
 Verify:
 
-- title;
+- article, category, and tags;
 - Markdown body;
 - created/edited timestamps;
 - truncation information if provided;
@@ -1230,7 +1234,7 @@ echo "Hello from WSL2"
 - API authentication works
 - Multipart upload works
 - Markdown import works
-- New Notion child page is created
+- New Notion article row is created
 
 **Important:** delete this test page from Notion after verification if no longer needed.
 EOF
@@ -1248,7 +1252,10 @@ Upload:
 curl -i -X POST \
   "$API_BASE/api/reference-library/import" \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/tmp/reference-api-smoke-test.md;type=text/markdown"
+  -F "file=@/tmp/reference-api-smoke-test.md;type=text/markdown" \
+  -F "article=Reference Library Smoke Test" \
+  -F "categoryOptionId=$REFERENCE_CATEGORY_OPTION_ID" \
+  -F "tagOptionIds=$REFERENCE_TAG_OPTION_ID"
 ```
 
 Possible outcomes:
@@ -1269,7 +1276,7 @@ Notion accepted an asynchronous Markdown write.
 
 If `202` is returned, inspect the response for the task/poll identifier and use the polling endpoint documented by the current implementation.
 
-After success, verify the new page appears below the Notion `Reference Library` parent page.
+Before running the metadata-bearing import, set option IDs returned by `/api/reference-library/meta`. After success, verify the new article row appears in the Notion Articles data source.
 
 ---
 

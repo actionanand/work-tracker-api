@@ -115,17 +115,9 @@ with `in_trash: true`. The Worker validates page ownership before trashing pages
 
 Memo detail and Reference Library detail endpoints read page-body markdown through Notion's markdown page APIs. Memo writes can update page-body markdown separately from the Memo data-source properties.
 
-Reference Library imports create normal child pages under `REFERENCE_LIBRARY_PAGE_ID` using markdown text, not Notion file attachments. When Notion returns an async task for markdown creation, the Worker exposes a normalized polling endpoint.
+Reference Library imports create article rows under `REFERENCE_LIBRARY_DATA_SOURCE_ID` using Markdown text, not Notion file attachments. Category and Tag option IDs are validated against the live data-source schema. When Notion returns an async task for Markdown creation, the Worker exposes a normalized polling endpoint.
 
-## Block Children
-
-Reference Library listing uses:
-
-```http
-GET /v1/blocks/{block_id}/children
-```
-
-Only direct `child_page` blocks are returned by the API. Detail reads verify that the requested page's parent is the configured Reference Library page before returning markdown.
+Reference Library listing and QUERY requests use the shared data-source query endpoint with cursor pagination and Notion-side filtering. Detail reads verify that the requested page belongs to the configured Articles data source before returning Markdown.
 
 ## Relation Properties
 
@@ -162,7 +154,7 @@ List endpoints support `pageSize` and `cursor` parameters. `pageSize` defaults t
 
 ## CORS And QUERY
 
-Preflight responses include `QUERY` in `Access-Control-Allow-Methods`. Resources that support HTTP QUERY return `Accept-Query: application/json`; metadata endpoints and Reference Library endpoints do not.
+Preflight responses include `QUERY` in `Access-Control-Allow-Methods`. Resources that support HTTP QUERY return `Accept-Query: application/json`; metadata and item-detail endpoints do not.
 
 ## Related Docs
 

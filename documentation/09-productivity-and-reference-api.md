@@ -5,8 +5,8 @@ The Productivity and Reference phase adds protected APIs for To Dos, Tasks, Memo
 ## Scope
 
 - To Dos, Tasks, and Memos are Notion data-source resources.
-- Reference Library is a normal Notion parent page whose direct child pages are exposed.
-- Advanced collection filtering uses HTTP `QUERY` for data-source resources only.
+- Reference Library articles are rows in a Notion data source with page-body Markdown.
+- Advanced collection filtering uses HTTP `QUERY` for data-source resources.
 - Writes are allow-listed and validate option IDs, page IDs, and ownership before mutating Notion.
 - Deletes move owned pages to Notion trash.
 
@@ -18,14 +18,14 @@ The Worker requires these non-secret Wrangler vars:
 TODOS_DATA_SOURCE_ID
 TASKS_DATA_SOURCE_ID
 MEMOS_DATA_SOURCE_ID
-REFERENCE_LIBRARY_PAGE_ID
+REFERENCE_LIBRARY_DATA_SOURCE_ID
 ```
 
 The Notion token remains a Worker secret and must not be stored in source, docs, or client apps.
 
 ## Markdown Handling
 
-Memo and Reference Library detail responses include page-body markdown. Memo writes update that markdown body synchronously. Reference Library imports accept markdown files and create normal child pages under the configured parent page using their existing asynchronous import flow.
+Memo and Reference Library detail responses include page-body markdown. Memo writes update that markdown body synchronously. Reference Library imports preserve uploaded Markdown while creating article rows in the configured data source using the existing asynchronous import flow.
 
 ## API References
 

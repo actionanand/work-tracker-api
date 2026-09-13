@@ -41,7 +41,7 @@ const testEnv: Env = {
 	TODOS_DATA_SOURCE_ID: "test-todos-data-source-id",
 	TASKS_DATA_SOURCE_ID: "test-tasks-data-source-id",
 	MEMOS_DATA_SOURCE_ID: "test-memos-data-source-id",
-	REFERENCE_LIBRARY_PAGE_ID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+	REFERENCE_LIBRARY_DATA_SOURCE_ID: "test-reference-library-data-source-id",
 };
 
 const todoPageId = "11111111-1111-1111-1111-111111111111";
@@ -181,6 +181,21 @@ function memoPage(overrides: Record<string, unknown> = {}) {
 	};
 }
 
+function referenceLibraryPage(overrides: Record<string, unknown> = {}) {
+	return {
+		id: referencePageId,
+		created_time: "2026-09-01T08:00:00.000Z",
+		last_edited_time: "2026-09-01T09:00:00.000Z",
+		parent: { data_source_id: testEnv.REFERENCE_LIBRARY_DATA_SOURCE_ID },
+		properties: {
+			Article: { title: [{ plain_text: "Angular Signal" }] },
+			Category: { select: { name: "Official" } },
+			Tags: { multi_select: [{ name: "Angular" }, { name: "Technical" }] },
+		},
+		...overrides,
+	};
+}
+
 function queryBody(fetchMock: ReturnType<typeof vi.fn>, dataSourceId: string) {
 	const call = fetchMock.mock.calls.find(([url]) =>
 		String(url).includes(`/data_sources/${dataSourceId}/query`),
@@ -200,6 +215,7 @@ describe("Productivity and Reference Library APIs", () => {
 		["/api/todos", "GET, QUERY, POST, OPTIONS"],
 		["/api/tasks", "GET, QUERY, POST, OPTIONS"],
 		["/api/memos", "GET, QUERY, POST, OPTIONS"],
+		["/api/reference-library", "GET, QUERY, OPTIONS"],
 	])("advertises QUERY support for %s", async (path, allow) => {
 		const response = await fetchWorker(path, { method: "OPTIONS" });
 
@@ -211,7 +227,12 @@ describe("Productivity and Reference Library APIs", () => {
 		);
 	});
 
-	it.each(["/api/todos/meta", "/api/tasks/meta", "/api/memos/meta"])(
+	it.each([
+		"/api/todos/meta",
+		"/api/tasks/meta",
+		"/api/memos/meta",
+		"/api/reference-library/meta",
+	])(
 		"does not advertise QUERY on metadata %s",
 		async (path) => {
 			const fetchMock = vi.fn().mockResolvedValue(schemaResponse({}));
@@ -692,55 +713,239 @@ describe("Productivity and Reference Library APIs", () => {
 		});
 	});
 
-	it("reads Reference Library child pages and rejects non-child detail ownership", async () => {
-		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-			if (String(url).includes(`/v1/blocks/${testEnv.REFERENCE_LIBRARY_PAGE_ID}/children`)) {
-				return Promise.resolve(
-					Response.json({
-						results: [
-							{
-								id: referencePageId,
-								type: "child_page",
-								created_time: "2026-09-01T08:00:00.000Z",
-								last_edited_time: "2026-09-01T09:00:00.000Z",
-								child_page: { title: "Runbook" },
-							},
-							{ id: "paragraph-id", type: "paragraph" },
+	it("returns live Reference Library metadata", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			schemaResponse({
+				Article: { type: "title", title: {} },
+				Category: selectSchema({ Official: "category-official" }),
+				Tags: multiSelectSchema({ Angular: "tag-angular", Technical: "tag-technical" }),
+				Created: { type: "created_time", created_time: {} },
+				"Last Edited": { type: "last_edited_time", last_edited_time: {} },
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/reference-library/meta");
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Accept-Query")).toBeNull();
+		expect(await response.json()).toEqual({
+			resource: "reference-library",
+			fields: [
+				{ key: "article", label: "Article", type: "title", writable: true },
+				{
+					key: "categoryOptionId",
+					label: "Category",
+					type: "select",
+					writable: true,
+					options: [{ id: "category-official", name: "Official", color: "default" }],
+				},
+				{
+					key: "tagOptionIds",
+					label: "Tags",
+					type: "multi_select",
+					writable: true,
+					options: [
+						{ id: "tag-angular", name: "Angular", color: "default" },
+						{ id: "tag-technical", name: "Technical", color: "default" },
+					],
+				},
+				{ key: "created", label: "Created", type: "created_time", writable: false },
+				{
+					key: "lastEdited",
+					label: "Last Edited",
+					type: "last_edited_time",
+					writable: false,
+				},
+			],
+		});
+	});
+
+	it("lists Reference Library data-source pages with cursor pagination", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				results: [referenceLibraryPage()],
+				has_more: true,
+				next_cursor: "reference-next",
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/reference-library?pageSize=2&cursor=reference-cursor",
+		);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Accept-Query")).toBe("application/json");
+		expect(queryBody(fetchMock, testEnv.REFERENCE_LIBRARY_DATA_SOURCE_ID)).toEqual({
+			page_size: 2,
+			start_cursor: "reference-cursor",
+			sorts: [{ property: "Last Edited", direction: "descending" }],
+		});
+		expect(await response.json()).toEqual({
+			data: [
+				{
+					id: referencePageId,
+					article: "Angular Signal",
+					category: "Official",
+					tags: ["Angular", "Technical"],
+					createdTime: "2026-09-01T08:00:00.000Z",
+					lastEditedTime: "2026-09-01T09:00:00.000Z",
+				},
+			],
+			count: 1,
+			hasMore: true,
+			nextCursor: "reference-next",
+		});
+	});
+
+	it("queries Reference Library with Notion-side category, tag, and title filters", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({ results: [referenceLibraryPage()], has_more: false, next_cursor: null }),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/reference-library",
+			jsonRequest("QUERY", {
+				filters: {
+					categories: ["Official", "Learning"],
+					tags: ["Angular", "Technical"],
+					q: "signal",
+				},
+				pageSize: 10,
+				cursor: "reference-query-cursor",
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Accept-Query")).toBe("application/json");
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expect(queryBody(fetchMock, testEnv.REFERENCE_LIBRARY_DATA_SOURCE_ID)).toEqual({
+			page_size: 10,
+			start_cursor: "reference-query-cursor",
+			sorts: [{ property: "Last Edited", direction: "descending" }],
+			filter: {
+				and: [
+					{
+						or: [
+							{ property: "Category", select: { equals: "Official" } },
+							{ property: "Category", select: { equals: "Learning" } },
 						],
-						has_more: false,
-						next_cursor: null,
-					}),
-				);
-			}
+					},
+					{
+						or: [
+							{ property: "Tags", multi_select: { contains: "Angular" } },
+							{ property: "Tags", multi_select: { contains: "Technical" } },
+						],
+					},
+					{ property: "Article", title: { contains: "signal" } },
+				],
+			},
+		});
+	});
+
+	it("rejects unknown Reference Library QUERY filters before calling Notion", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/reference-library",
+			jsonRequest("QUERY", { filters: { status: "Published" } }),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid request",
+			field: "status",
+			message: "Unknown filter",
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("reads owned Reference Library markdown and safely normalizes empty blocks", async () => {
+		const outsiderPageId = "77777777-7777-7777-7777-777777777777";
+		const markdown = [
+			"## Angular 22",
+			"",
+			"  <empty-block/> \t",
+			"",
+			"```mermaid",
+			"flowchart TD",
+			"    A[Start] --> B[End]",
+			"<empty-block/>",
+			"```",
+			"",
+			"~~~text",
+			"<empty-block/>",
+			"~~~",
+			"",
+			"Inline `<empty-block/>` remains literal.",
+			"",
+			"$$E = mc^2$$",
+			"<unknown id=\"block-id\"/>",
+		].join("\n");
+		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
 			if (url.endsWith(`/v1/pages/${referencePageId}`) && init?.method === "GET") {
+				return Promise.resolve(Response.json(referenceLibraryPage()));
+			}
+			if (url.endsWith(`/v1/pages/${referencePageId}/markdown`)) {
+				return Promise.resolve(Response.json({ markdown }));
+			}
+			if (url.endsWith(`/v1/pages/${outsiderPageId}`) && init?.method === "GET") {
 				return Promise.resolve(
-					Response.json({
-						id: referencePageId,
-						created_time: "2026-09-01T08:00:00.000Z",
-						last_edited_time: "2026-09-01T09:00:00.000Z",
-						parent: { type: "data_source_id", data_source_id: testEnv.MEMOS_DATA_SOURCE_ID },
-						properties: { title: { title: [{ plain_text: "Runbook" }] } },
-					}),
+					Response.json(
+						referenceLibraryPage({
+							id: outsiderPageId,
+							parent: { data_source_id: testEnv.MEMOS_DATA_SOURCE_ID },
+						}),
+					),
 				);
 			}
 			return Promise.resolve(Response.json({}));
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
-		const list = await fetchWorker("/api/reference-library");
 		const detail = await fetchWorker(`/api/reference-library/${referencePageId}`);
+		const outsider = await fetchWorker(`/api/reference-library/${outsiderPageId}`);
+		const body = (await detail.json()) as { markdown: string };
 
-		expect(list.status).toBe(200);
-		expect(await list.json()).toMatchObject({
-			data: [{ id: referencePageId, title: "Runbook" }],
-			count: 1,
+		expect(detail.status).toBe(200);
+		expect(detail.headers.get("Accept-Query")).toBeNull();
+		expect(body).toMatchObject({
+			article: "Angular Signal",
+			category: "Official",
+			tags: ["Angular", "Technical"],
 		});
-		expect(detail.status).toBe(404);
-		expect(await detail.json()).toEqual({ error: "Reference Library item not found" });
+		expect(body.markdown).toContain("```mermaid\nflowchart TD");
+		expect(body.markdown).toContain("```mermaid\nflowchart TD\n    A[Start] --> B[End]\n<empty-block/>\n```");
+		expect(body.markdown).toContain("~~~text\n<empty-block/>\n~~~");
+		expect(body.markdown).toContain("Inline `<empty-block/>` remains literal.");
+		expect(body.markdown).toContain("$$E = mc^2$$");
+		expect(body.markdown).toContain("<unknown id=\"block-id\"/>");
+		expect(body.markdown).not.toContain("<empty-block/> \t");
+		expect(outsider.status).toBe(404);
+		expect(await outsider.json()).toEqual({ error: "Reference Library item not found" });
+		expect(
+			fetchMock.mock.calls.some(([url]) =>
+				String(url).endsWith(`/v1/pages/${outsiderPageId}/markdown`),
+			),
+		).toBe(false);
 	});
 
-	it("imports Reference Library markdown as a child page and normalizes async polling", async () => {
+	it("imports Reference Library markdown with validated metadata and async polling", async () => {
 		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+			if (url.endsWith(`/data_sources/${testEnv.REFERENCE_LIBRARY_DATA_SOURCE_ID}`)) {
+				return Promise.resolve(
+					schemaResponse({
+						Category: selectSchema({ Official: "category-official" }),
+						Tags: multiSelectSchema({
+							Angular: "tag-angular",
+							Technical: "tag-technical",
+						}),
+					}),
+				);
+			}
 			if (url.endsWith("/v1/pages") && init?.method === "POST") {
 				return Promise.resolve(
 					Response.json({
@@ -763,8 +968,13 @@ describe("Productivity and Reference Library APIs", () => {
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
+		const markdown = "# Angular Signal\n\n```mermaid\nflowchart TD\nA --> B\n```\n\n$$x^2$$";
 		const formData = new FormData();
-		formData.set("file", new File(["# Hello"], "hello-world.md", { type: "text/markdown" }));
+		formData.set("file", new File([markdown], "angular-signal.md", { type: "text/markdown" }));
+		formData.set("article", "Angular Signal");
+		formData.set("categoryOptionId", "category-official");
+		formData.append("tagOptionIds", "tag-angular");
+		formData.append("tagOptionIds", "tag-technical");
 
 		const imported = await fetchWorker("/api/reference-library/import", {
 			method: "POST",
@@ -782,9 +992,13 @@ describe("Productivity and Reference Library APIs", () => {
 
 		expect(imported.status).toBe(202);
 		expect(importBody).toEqual({
-			parent: { page_id: testEnv.REFERENCE_LIBRARY_PAGE_ID },
-			properties: { title: { title: [{ text: { content: "hello-world" } }] } },
-			markdown: "# Hello",
+			parent: { data_source_id: testEnv.REFERENCE_LIBRARY_DATA_SOURCE_ID },
+			properties: {
+				Article: { title: [{ text: { content: "Angular Signal" } }] },
+				Category: { select: { id: "category-official" } },
+				Tags: { multi_select: [{ id: "tag-angular" }, { id: "tag-technical" }] },
+			},
+			markdown,
 			allow_async: true,
 		});
 		expect(await imported.json()).toEqual({
@@ -799,5 +1013,38 @@ describe("Productivity and Reference Library APIs", () => {
 			pageId: referencePageId,
 			failed: false,
 		});
+	});
+
+	it("rejects unknown Reference Library import options before creating a page", async () => {
+		const fetchMock = vi.fn((url: string) => {
+			if (url.endsWith(`/data_sources/${testEnv.REFERENCE_LIBRARY_DATA_SOURCE_ID}`)) {
+				return Promise.resolve(
+					schemaResponse({
+						Category: selectSchema({ Official: "category-official" }),
+					}),
+				);
+			}
+			return Promise.resolve(Response.json({}));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const formData = new FormData();
+		formData.set("file", new File(["# Article"], "article.md", { type: "text/markdown" }));
+		formData.set("categoryOptionId", "unknown-category");
+
+		const response = await fetchWorker("/api/reference-library/import", {
+			method: "POST",
+			body: formData,
+		});
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid request",
+			field: "categoryOptionId",
+			message: "Unknown option ID",
+		});
+		expect(
+			fetchMock.mock.calls.some(([url]) => String(url).endsWith("/v1/pages")),
+		).toBe(false);
 	});
 });

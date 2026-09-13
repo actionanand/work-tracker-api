@@ -116,6 +116,7 @@ export function corsPreflightResponse(pathname = ""): Response {
 		"/api/todos",
 		"/api/tasks",
 		"/api/memos",
+		"/api/reference-library",
 	].includes(pathname);
 	const allow = allowHeaderForPath(pathname);
 
@@ -167,7 +168,7 @@ function allowHeaderForPath(pathname: string): string | null {
 	}
 
 	if (pathname === "/api/reference-library") {
-		return "GET, OPTIONS";
+		return "GET, QUERY, OPTIONS";
 	}
 
 	if (pathname === "/api/reference-library/import") {

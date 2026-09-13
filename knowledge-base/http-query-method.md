@@ -17,7 +17,7 @@ QUERY /api/memos
 
 These endpoints are authenticated like other protected `/api/*` routes and are read-only. They do not create, update, delete, cache, or mutate Notion data.
 
-Reference Library routes do not support `QUERY` because they operate on a parent page's direct child pages rather than a Notion data source.
+Reference Library supports `QUERY` on `/api/reference-library` with `categories`, `tags`, and `q` filters. Its metadata, detail, import, and import-status routes do not advertise QUERY.
 
 ## Headers
 
