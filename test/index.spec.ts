@@ -236,9 +236,20 @@ function stubNotionFetchWithResponse(responseBody: unknown) {
 	return fetchMock;
 }
 
-async function fetchWorker(path: string): Promise<Response> {
+async function fetchWorker(
+	path: string,
+	init: RequestInit = {},
+): Promise<Response> {
+	const headers = new Headers(init.headers);
+
+	for (const [key, value] of Object.entries(await createAuthHeaders(testEnv))) {
+		headers.set(key, value);
+	}
+
 	const request = new IncomingRequest(`http://example.com${path}`, {
-		headers: await createAuthHeaders(testEnv),
+		method: init.method,
+		body: init.body,
+		headers,
 	});
 	const ctx = createExecutionContext();
 
@@ -247,6 +258,14 @@ async function fetchWorker(path: string): Promise<Response> {
 	await waitOnExecutionContext(ctx);
 
 	return response;
+}
+
+function jsonRequest(method: string, body: unknown): RequestInit {
+	return {
+		method,
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	};
 }
 
 function expectNotionPostBody(
@@ -292,6 +311,27 @@ function expectJiraKeyLookupBody(fetchMock: ReturnType<typeof vi.fn>, jiraKey: s
 		},
 		100,
 	);
+}
+
+function expectJiraOptionsBody(
+	fetchMock: ReturnType<typeof vi.fn>,
+	expectedBody: unknown,
+) {
+	expect(fetchMock).toHaveBeenCalledWith(
+		"https://api.notion.com/v1/data_sources/test-jiras-data-source-id/query",
+		expect.objectContaining({
+			method: "POST",
+			headers: {
+				Authorization: "Bearer test-notion-token",
+				"Notion-Version": "2026-03-11",
+				"Content-Type": "application/json",
+			},
+		}),
+	);
+
+	const [, requestInit] = fetchMock.mock.calls[0];
+
+	expect(JSON.parse(String(requestInit.body))).toEqual(expectedBody);
 }
 
 const sprint5Id = "55555555-5555-5555-5555-555555555555";
@@ -489,6 +529,232 @@ describe("Work Tracker API worker", () => {
 			});
 		},
 	);
+
+	it("queries lightweight JIRA options with the active sprint filter by default", async () => {
+		const fetchMock = stubNotionFetch();
+
+		const response = await fetchWorker(
+			"/api/jiras/options",
+			jsonRequest("QUERY", { filters: {} }),
+		);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Accept-Query")).toBe("application/json");
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expectJiraOptionsBody(fetchMock, {
+			page_size: 20,
+			filter: activeSprintFilter,
+			sorts: [{ property: "JIRA Key", direction: "ascending" }],
+		});
+		expect(await response.json()).toEqual({
+			data: [
+				{
+					id: "jira-page-id",
+					jiraKey: "ABC-123",
+					summary: "Fix API response",
+					status: "Done",
+					inActiveSprint: false,
+				},
+			],
+			count: 1,
+			hasMore: false,
+			nextCursor: null,
+		});
+	});
+
+	it.each([
+		["missing q", {}],
+		["empty q", { q: "" }],
+		["whitespace q", { q: "   " }],
+	])("uses active sprint JIRA options filter for %s", async (_name, filters) => {
+		const fetchMock = stubNotionFetch();
+
+		const response = await fetchWorker(
+			"/api/jiras/options",
+			jsonRequest("QUERY", { filters }),
+		);
+
+		expect(response.status).toBe(200);
+		expectJiraOptionsBody(fetchMock, {
+			page_size: 20,
+			filter: activeSprintFilter,
+			sorts: [{ property: "JIRA Key", direction: "ascending" }],
+		});
+	});
+
+	it("searches all JIRAs for non-empty options q without active sprint filtering", async () => {
+		const fetchMock = stubNotionFetchWithResponse({
+			results: [
+				{
+					...notionJiraPage,
+					properties: {
+						...notionJiraPage.properties,
+						"In Active Sprint": { formula: { boolean: false } },
+					},
+				},
+			],
+			has_more: true,
+			next_cursor: "next-jira-option",
+		});
+
+		const response = await fetchWorker(
+			"/api/jiras/options",
+			jsonRequest("QUERY", {
+				filters: { q: "CRI-1234" },
+				pageSize: 12,
+				cursor: "opaque-option-cursor",
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		expectJiraOptionsBody(fetchMock, {
+			page_size: 12,
+			start_cursor: "opaque-option-cursor",
+			filter: {
+				or: [
+					{
+						property: "JIRA Key",
+						title: {
+							contains: "CRI-1234",
+						},
+					},
+					{
+						property: "Summary",
+						rich_text: {
+							contains: "CRI-1234",
+						},
+					},
+				],
+			},
+			sorts: [{ property: "JIRA Key", direction: "ascending" }],
+		});
+		const body = (await response.json()) as {
+			data: Array<Record<string, unknown>>;
+			count: number;
+			hasMore: boolean;
+			nextCursor: string | null;
+		};
+		expect(Object.keys(body.data[0]).sort()).toEqual([
+			"id",
+			"inActiveSprint",
+			"jiraKey",
+			"status",
+			"summary",
+		]);
+		expect(body).toMatchObject({
+			count: 1,
+			hasMore: true,
+			nextCursor: "next-jira-option",
+		});
+		expect(
+			fetchMock.mock.calls.some(([url]) =>
+				String(url).includes(testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID),
+			),
+		).toBe(false);
+		expect(
+			fetchMock.mock.calls.some(([url]) =>
+				String(url).includes(testEnv.SPRINTS_DATA_SOURCE_ID),
+			),
+		).toBe(false);
+	});
+
+	it("rejects unsupported JIRA options filters before Notion is called", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/jiras/options",
+			jsonRequest("QUERY", { filters: { statuses: ["Done"] } }),
+		);
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid request",
+			field: "statuses",
+			message: "Unknown filter",
+		});
+	});
+
+	it("rejects relation enrichment for JIRA options before Notion is called", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/jiras/options",
+			jsonRequest("QUERY", { filters: {}, includeRelations: true }),
+		);
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid request",
+			field: "includeRelations",
+			message: "Relation enrichment is not supported for JIRA options",
+		});
+	});
+
+	it("returns invalid JSON errors for malformed JIRA options QUERY bodies", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/jiras/options", {
+			method: "QUERY",
+			headers: { "Content-Type": "application/json" },
+			body: "{",
+		});
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: "Invalid JSON",
+		});
+	});
+
+	it("requires auth for JIRA options", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		const request = new IncomingRequest("http://example.com/api/jiras/options", {
+			method: "QUERY",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ filters: {} }),
+		});
+		const ctx = createExecutionContext();
+
+		const response = await worker.fetch(request, testEnv, ctx);
+
+		await waitOnExecutionContext(ctx);
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(response.status).toBe(401);
+		expect(await response.json()).toEqual({
+			error: "Unauthorized",
+		});
+	});
+
+	it("advertises only QUERY and OPTIONS for JIRA options preflight", async () => {
+		const response = await fetchWorker("/api/jiras/options", { method: "OPTIONS" });
+
+		expect(response.status).toBe(204);
+		expect(response.headers.get("Allow")).toBe("QUERY, OPTIONS");
+		expect(response.headers.get("Accept-Query")).toBe("application/json");
+		expect(response.headers.get("Access-Control-Allow-Methods")).toBe(
+			"GET, QUERY, POST, PATCH, DELETE, OPTIONS",
+		);
+	});
+
+	it("does not interpret the static JIRA options path as a JIRA key", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/jiras/options");
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(response.status).toBe(404);
+		expect(await response.json()).toEqual({
+			error: "Not found",
+		});
+	});
 
 	it("sends pagination without changing the blocked JIRA filter", async () => {
 		const fetchMock = stubNotionFetchWithResponse({

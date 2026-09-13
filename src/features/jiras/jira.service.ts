@@ -20,6 +20,7 @@ import {
 } from "./jira.history";
 import { jiraFilters } from "./jira.filters";
 import { mapJira, type Jira, type NotionJiraPage } from "./jira.mapper";
+import { mapJiraOption, type JiraOption } from "./jira-option.mapper";
 
 export interface JiraListResponse<TJira = Jira> {
 	data: TJira[];
@@ -61,6 +62,36 @@ export async function listJiras(
 	return {
 		data: responseData,
 		count: responseData.length,
+		hasMore: notion.has_more,
+		nextCursor: notion.next_cursor,
+	};
+}
+
+const jiraOptionSorts = [
+	{
+		property: "JIRA Key",
+		direction: "ascending",
+	},
+] satisfies Array<{ property: string; direction: "ascending" | "descending" }>;
+
+export async function listJiraOptions(
+	env: Env,
+	filter: NotionQueryFilter,
+	pagination: PaginationParams,
+): Promise<JiraListResponse<JiraOption>> {
+	const notion = await queryNotionDataSource<NotionJiraPage>({
+		dataSourceId: env.JIRAS_DATA_SOURCE_ID,
+		env,
+		filter,
+		sorts: jiraOptionSorts,
+		pageSize: pagination.pageSize,
+		startCursor: pagination.cursor,
+	});
+	const data = notion.results.map(mapJira).map(mapJiraOption);
+
+	return {
+		data,
+		count: data.length,
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};

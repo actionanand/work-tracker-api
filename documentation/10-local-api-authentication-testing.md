@@ -263,7 +263,254 @@ curl -sS \
 
 If renewal says reauthentication is required, perform a fresh password login.
 
-## 11. Common `401 Unauthorized` troubleshooting
+## 11. Active session management
+
+The Worker stores active login sessions and exposes protected APIs to inspect and revoke them.
+
+Current session-management routes are:
+
+```text
+GET    /api/auth/sessions
+POST   /api/auth/sessions/logout-others
+POST   /api/auth/logout
+DELETE /api/auth/sessions/:sessionId
+```
+
+All of these require a valid bearer token.
+
+### 11.1 List all active sessions
+
+Use:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions | jq
+```
+
+The response contains the currently active, non-revoked sessions for the authenticated account.
+
+Example shape:
+
+```json
+{
+  "sessions": [
+    {
+      "id": "session-uuid",
+      "current": true,
+      "device": {
+        "deviceId": "local-api-test",
+        "name": "WSL curl",
+        "platform": "desktop",
+        "model": "WSL2",
+        "appVersion": "dev"
+      },
+      "ipAddress": "local-development",
+      "country": null,
+      "createdAt": "2026-09-13T08:00:00.000Z",
+      "lastSeenAt": "2026-09-13T08:05:00.000Z",
+      "expiresAt": "2026-09-13T16:00:00.000Z"
+    }
+  ]
+}
+```
+
+The current session is returned first and has:
+
+```json
+{
+  "current": true
+}
+```
+
+Only active, non-revoked, non-expired sessions are returned.
+
+### 11.2 Log out all other sessions
+
+To keep the current WSL2/browser session signed in but revoke every other active session:
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions/logout-others | jq
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "revokedCount": 2
+}
+```
+
+This does **not** revoke the current session.
+
+It is equivalent to the Office Orbit action:
+
+```text
+Log out from all other devices
+```
+
+Afterward, confirm the remaining sessions:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions | jq
+```
+
+Normally only the current session should remain.
+
+### 11.3 Log out the current session
+
+To revoke only the session represented by the current `$TOKEN`:
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/logout | jq
+```
+
+Expected response:
+
+```json
+{
+  "success": true
+}
+```
+
+After this succeeds, the current bearer token is no longer valid.
+
+Verify:
+
+```bash
+curl -i \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/status
+```
+
+Expected:
+
+```text
+401 Unauthorized
+```
+
+Clear the shell token afterward:
+
+```bash
+unset TOKEN
+```
+
+You must log in again before calling protected APIs.
+
+### 11.4 Log out every active session
+
+The current Worker does **not** expose one single endpoint named, for example, `/api/auth/logout-all`.
+
+To log out every active session safely, use the existing APIs in this order:
+
+1. revoke all sessions except the current one;
+2. revoke the current session.
+
+Run:
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions/logout-others | jq
+
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/logout | jq
+
+unset TOKEN
+```
+
+After the second request succeeds, the token used for these commands is revoked, so no authenticated request can be made with it afterward.
+
+This sequence effectively logs the account out from **all active sessions**, including the current WSL2 session.
+
+### 11.5 Log out one specific session
+
+First list active sessions:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions | jq
+```
+
+Copy the `id` of the session you want to revoke.
+
+Then:
+
+```bash
+SESSION_ID="PASTE_SESSION_ID_HERE"
+
+curl -sS -X DELETE \
+  -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8787/api/auth/sessions/$SESSION_ID" | jq
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "sessionId": "session-uuid",
+  "currentSession": false
+}
+```
+
+If the deleted `SESSION_ID` is the current session, the response will contain:
+
+```json
+{
+  "currentSession": true
+}
+```
+
+and the current bearer token will stop working.
+
+### 11.6 Useful WSL2 session-management sequence
+
+List sessions:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions | jq
+```
+
+Log out every other device:
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions/logout-others | jq
+```
+
+Check what remains:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/sessions | jq
+```
+
+End the current session when finished:
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/auth/logout | jq
+
+unset TOKEN
+```
+
+
+## 12. Common `401 Unauthorized` troubleshooting
 
 ### Check whether `TOKEN` exists
 
@@ -309,7 +556,7 @@ Make sure `wrangler dev` is running with the expected local secrets and bindings
 
 Do not paste secrets into commands simply to work around configuration problems.
 
-## 12. Recommended local testing workflow
+## 13. Recommended local testing workflow
 
 ```text
 1. npm run dev
@@ -319,8 +566,10 @@ Do not paste secrets into commands simply to work around configuration problems.
 5. redact response before displaying it
 6. export TOKEN
 7. GET /api/auth/status
-8. test feature endpoints
-9. renew/login again when required
+8. optionally GET /api/auth/sessions to verify active sessions
+9. test feature endpoints
+10. renew/login again when required
+11. POST /api/auth/logout when finished
 ```
 
 This separates authentication failures from feature/API failures and makes manual testing easier to diagnose.

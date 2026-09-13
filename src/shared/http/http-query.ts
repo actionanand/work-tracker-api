@@ -15,6 +15,10 @@ export interface DomainQueryRequest {
 	includeRelations: boolean;
 }
 
+export interface DomainQueryRequestOptions {
+	defaultPageSize?: number;
+}
+
 const ALLOWED_TOP_LEVEL_FIELDS = new Set([
 	"filters",
 	"pageSize",
@@ -26,6 +30,7 @@ const ALLOWED_TOP_LEVEL_FIELDS = new Set([
 export async function parseDomainQueryRequest(
 	request: Request,
 	allowedFilters: Set<string>,
+	options: DomainQueryRequestOptions = {},
 ): Promise<DomainQueryRequest | Response> {
 	const parsedBody = await parseJsonRequestBody(request);
 
@@ -59,7 +64,10 @@ export async function parseDomainQueryRequest(
 		}
 	}
 
-	const pageSize = parsePageSize(parsedBody.value.pageSize);
+	const pageSize = parsePageSize(
+		parsedBody.value.pageSize,
+		options.defaultPageSize ?? DEFAULT_PAGE_SIZE,
+	);
 
 	if (pageSize instanceof Response) {
 		return pageSize;
@@ -87,9 +95,9 @@ export async function parseDomainQueryRequest(
 	};
 }
 
-function parsePageSize(value: unknown): number | Response {
+function parsePageSize(value: unknown, defaultPageSize: number): number | Response {
 	if (value === undefined || value === null) {
-		return DEFAULT_PAGE_SIZE;
+		return defaultPageSize;
 	}
 
 	if (

@@ -6,6 +6,7 @@ The Work Tracker API uses HTTP `QUERY` for safe JSON-body read requests where qu
 
 ```text
 QUERY /api/jiras
+QUERY /api/jiras/options
 QUERY /api/work-logs
 QUERY /api/feedback
 QUERY /api/work-links
@@ -63,9 +64,12 @@ The Worker translates supported filters into Notion data-source filters:
 - relation IDs are normalized Notion page IDs before use
 - all filtering is performed by Notion, not by fetching all rows and filtering in JavaScript
 
+`QUERY /api/jiras/options` is intentionally narrower than generic JIRA QUERY. It allows only `q`, defaults to active-sprint JIRAs when `q` is missing or blank, and searches all JIRAs when `q` has text.
+
 ## Related Docs
 
 - [JIRA API](jira-api.md)
+- [JIRA Picker API](jira-picker-api.md)
 - [Work Log API](work-log-api.md)
 - [Feedback API](feedback-api.md)
 - [Work Links API](work-links-api.md)
