@@ -20,6 +20,8 @@ Task responses include title, status, priority, responsibility, requested/assign
 
 When `include=relations` or `includeRelations: true` is used, the response also includes shallow `companies` and `jiras` arrays while preserving the raw ID arrays.
 
+Task writes continue to accept selected Notion JIRA page IDs through `jiraIds`. Clients should use `QUERY /api/jiras/options` for scalable JIRA relation selection instead of loading every JIRA.
+
 ## QUERY Filters
 
 Supported filters are `statuses`, `priorities`, `responsibilities`, `requestedByTypes`, `assignedToTypes`, `companyIds`, `jiraIds`, due-date filters, follow-up-date filters, completed-date filters, and `q`.

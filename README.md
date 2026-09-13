@@ -197,6 +197,7 @@ Layer responsibilities:
 | `GET` | `/api/jiras/demoed` | JIRAs with a demo date. |
 | `GET` | `/api/jiras/:jiraKey` | Single JIRA lookup by JIRA Key, such as `/api/jiras/CRI-1234`. |
 | `QUERY` | `/api/jiras` | JSON-body read query for JIRAs with server-side Notion filtering. |
+| `QUERY` | `/api/jiras/options` | Lightweight JIRA picker/autocomplete query for Task relation selection. |
 | `GET` | `/api/sprints` | All Sprints from the configured Notion data source. |
 | `GET` | `/api/sprints/active` | Active Sprints. |
 | `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
@@ -269,7 +270,9 @@ Auth access tokens last 1 hour. While a token is still valid and its backing D1 
 
 Selected endpoints support optional shallow relation enrichment with `include=relations`. Existing raw relation ID fields remain unchanged, and default responses are unchanged when `include` is absent.
 
-`QUERY` is supported by `/api/jiras`, `/api/work-logs`, `/api/feedback`, `/api/work-links`, `/api/todos`, `/api/tasks`, and `/api/memos` for JSON-body read requests. These endpoints advertise `Accept-Query: application/json`, remain safe/idempotent, and translate domain filters into Notion data-source filters. Clients do not send raw Notion filter JSON. Metadata endpoints and Reference Library endpoints do not advertise `Accept-Query`.
+`QUERY` is supported by `/api/jiras`, `/api/jiras/options`, `/api/work-logs`, `/api/feedback`, `/api/work-links`, `/api/todos`, `/api/tasks`, and `/api/memos` for JSON-body read requests. These endpoints advertise `Accept-Query: application/json`, remain safe/idempotent, and translate domain filters into Notion data-source filters. Clients do not send raw Notion filter JSON. Metadata endpoints and Reference Library endpoints do not advertise `Accept-Query`.
+
+`QUERY /api/jiras/options` is a lightweight picker endpoint. With no `q`, or an empty/whitespace `q`, it returns only current active-sprint JIRAs. With a non-empty `q`, it searches all JIRAs by `JIRA Key` or `Summary`, including historical and non-sprint JIRAs. It returns only `id`, `jiraKey`, `summary`, `status`, and `inActiveSprint`.
 
 Write endpoints are intentionally allow-listed. They accept only documented mapped fields, validate Notion status/select/multi-select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion. Delete endpoints move owned pages to Notion trash; they do not hard-delete data.
 
@@ -477,6 +480,8 @@ curl -s http://localhost:8787/api/releases/pending?deploymentType=Backstage -H "
 curl -s http://localhost:8787/api/feedback/negative?from=2026-01-01\&to=2026-12-31 -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/work-links/active?type=Documentation -H "Authorization: Bearer $TOKEN" | jq
 curl -s http://localhost:8787/api/jiras/CRI-1234?include=relations -H "Authorization: Bearer $TOKEN" | jq
+curl -s -X QUERY http://localhost:8787/api/jiras/options -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{},"pageSize":20}' | jq
+curl -s -X QUERY http://localhost:8787/api/jiras/options -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"q":"CRI-"},"pageSize":20}' | jq
 curl -s -X QUERY http://localhost:8787/api/todos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"statuses":["In progress"],"dueOnOrBefore":"2026-09-30"}}' | jq
 curl -s -X QUERY http://localhost:8787/api/tasks -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"priorities":["High"],"companyIds":["company-page-id"]},"includeRelations":true}' | jq
 curl -s -X QUERY http://localhost:8787/api/memos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"tags":["api"],"pinned":true}}' | jq
@@ -513,6 +518,7 @@ Living technical references:
 - [Architecture](knowledge-base/architecture.md)
 - [Authentication](knowledge-base/authentication.md)
 - [JIRA API](knowledge-base/jira-api.md)
+- [JIRA Picker API](knowledge-base/jira-picker-api.md)
 - [Sprint API](knowledge-base/sprint-api.md)
 - [Company, Team, and Project API](knowledge-base/company-team-project-api.md)
 - [Work Log API](knowledge-base/work-log-api.md)

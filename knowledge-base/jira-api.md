@@ -15,6 +15,7 @@ This document describes the JIRA API functionality currently implemented in the 
 | `GET` | `/api/jiras/demoed` | Query JIRAs with a demo date. |
 | `GET` | `/api/jiras/:jiraKey` | Query one JIRA by its `JIRA Key` title property. |
 | `QUERY` | `/api/jiras` | Query JIRAs with a JSON request body and Notion-side filters. |
+| `QUERY` | `/api/jiras/options` | Query lightweight JIRA picker/autocomplete options. |
 
 Static JIRA routes are matched before dynamic JIRA key lookup. Unknown paths such as `/api/jiras/random` are not handled by `handleJiraRoutes()` and fall through to the main Worker 404.
 
@@ -33,7 +34,7 @@ All JIRA list endpoints return:
 
 `GET /api/jiras/:jiraKey` returns a single mapped JIRA object instead of the collection wrapper.
 
-JIRA list endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. Cursors are opaque and should be discarded when filters or views change. `GET /api/jiras/:jiraKey` is not paginated.
+JIRA list endpoints support shared server-side pagination with `pageSize` and `cursor`. `pageSize` defaults to `25` and maxes at `100`; `count` is the current page size, not a total. `QUERY /api/jiras/options` defaults to `20` and maxes at `100`. Cursors are opaque and should be discarded when filters or views change. `GET /api/jiras/:jiraKey` is not paginated.
 
 If no matching JIRA exists, the endpoint returns:
 
@@ -60,6 +61,8 @@ Filtering is performed in the Notion data-source query request, not by filtering
 | `/api/jiras/demo-pending` | `Demo Required = true AND Demoed Date is empty` |
 | `/api/jiras/demoed` | `Demoed Date is not empty` |
 | `/api/jiras/:jiraKey` | `JIRA Key = :jiraKey` |
+| `QUERY /api/jiras/options` with no `q` | `In Active Sprint = true` |
+| `QUERY /api/jiras/options` with `q` | `JIRA Key contains q OR Summary contains q` across all JIRAs |
 
 `In Active Sprint` and `Spillover` are Notion formula values returning booleans.
 
@@ -85,7 +88,47 @@ Filtering is performed in the Notion data-source query request, not by filtering
 }
 ```
 
-Multiple values for one field are composed with Notion `or`. Different fields are composed with Notion `and`. Unknown top-level fields or filter names return HTTP 400 before Notion is called. `sprintIds` must contain valid Notion page IDs.
+Multiple values for one field are composed with Notion `or`. Different fields are composed with Notion `and`. Unknown top-level fields or filter names return HTTP 400 before Notion is called. Relation filters must contain valid Notion page IDs.
+
+## JIRA Picker Options
+
+`QUERY /api/jiras/options` is intended for relation picker/autocomplete UI, especially Task and follow-up JIRA selection.
+
+Request:
+
+```json
+{
+  "filters": {
+    "q": "CRI-"
+  },
+  "pageSize": 20,
+  "cursor": null
+}
+```
+
+Only `q` is supported. `includeRelations: true` is rejected because this endpoint deliberately does not enrich relations or query Sprint Allocations.
+
+With no `q`, or with an empty/whitespace `q`, the Worker asks Notion for active-sprint JIRAs only. With a non-empty `q`, the Worker searches all JIRAs by `JIRA Key` and `Summary`; it does not keep the active-sprint filter during search.
+
+Response items are lightweight:
+
+```json
+{
+  "id": "jira-page-id",
+  "jiraKey": "CRI-1234",
+  "summary": "Short summary",
+  "status": "In progress",
+  "inActiveSprint": true
+}
+```
+
+Intended client flow:
+
+```text
+Open picker -> QUERY /api/jiras/options without q -> active Sprint JIRAs
+Type search text -> debounce around 300ms -> QUERY with q -> search all JIRAs
+Clear search -> reset cursor -> QUERY without q -> active Sprint JIRAs
+```
 
 ## Mapped JIRA Fields
 
@@ -202,6 +245,7 @@ Current tests cover:
 - JIRA detail Sprint Allocation query pagination
 - no Sprint Allocation query for JIRA list routes
 - HTTP QUERY request-body filters
+- lightweight JIRA picker options route
 - unknown JIRA path fallthrough behavior
 
 Do not hardcode current sample test records as assumptions about production data.
@@ -211,4 +255,5 @@ Do not hardcode current sample test records as assumptions about production data
 - [Architecture](architecture.md)
 - [Relation Enrichment](relation-enrichment.md)
 - [Notion Integration](notion-integration.md)
+- [JIRA Picker API](jira-picker-api.md)
 - [Worker as API Proxy](../documentation/04-worker-as-api-proxy.md)

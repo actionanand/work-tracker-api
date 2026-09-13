@@ -2,6 +2,7 @@ import type { Env } from "../../shared/env";
 import { parseDomainQueryRequest, withAcceptQuery } from "../../shared/http/http-query";
 import {
 	parseBooleanValue,
+	invalidRequest,
 	parseNotionIdArrayValue,
 	parseStringArrayValue,
 	parseStringValue,
@@ -17,6 +18,7 @@ import {
 	DuplicateJiraKeyError,
 	JiraNotFoundError,
 	getJiraByKey,
+	listJiraOptions,
 	listJiras,
 } from "./jira.service";
 
@@ -41,6 +43,9 @@ const JIRA_QUERY_FILTERS = new Set([
 	"demoRequired",
 	"q",
 ]);
+
+const JIRA_OPTIONS_QUERY_FILTERS = new Set(["q"]);
+const JIRA_OPTIONS_DEFAULT_PAGE_SIZE = 20;
 
 function buildBodyFilter(filters: Record<string, unknown>): NotionQueryFilter | Response | undefined {
 	const statuses = parseStringArrayValue(filters.statuses, "statuses");
@@ -87,11 +92,87 @@ function buildBodyFilter(filters: Record<string, unknown>): NotionQueryFilter | 
 	]);
 }
 
+function buildOptionsBodyFilter(filters: Record<string, unknown>): NotionQueryFilter | Response {
+	const query = parseStringValue(filters.q, "q");
+
+	if (query instanceof Response) {
+		return query;
+	}
+
+	return query ? jiraFilters.query(query) : jiraFilters.active;
+}
+
+function noStore(response: Response): Response {
+	const headers = new Headers(response.headers);
+
+	headers.set("Cache-Control", "no-store");
+
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	});
+}
+
 export async function handleJiraRoutes(
 	request: Request,
 	url: URL,
 	env: Env,
 ): Promise<Response | null> {
+	if (request.method === "QUERY" && url.pathname === "/api/jiras/options") {
+		const query = await parseDomainQueryRequest(
+			request,
+			JIRA_OPTIONS_QUERY_FILTERS,
+			{ defaultPageSize: JIRA_OPTIONS_DEFAULT_PAGE_SIZE },
+		);
+
+		if (query instanceof Response) {
+			return query;
+		}
+
+		if (query.includeRelations) {
+			return invalidRequest(
+				"Relation enrichment is not supported for JIRA options",
+				"includeRelations",
+			);
+		}
+
+		const filter = buildOptionsBodyFilter(query.filters);
+
+		if (filter instanceof Response) {
+			return filter;
+		}
+
+		try {
+			return withAcceptQuery(
+				noStore(
+					Response.json(
+						await listJiraOptions(env, filter, query.pagination),
+					),
+				),
+			);
+		} catch (error) {
+			const invalidCursorResponse = query.pagination.cursor
+				? invalidPaginationCursorResponse(error)
+				: null;
+
+			if (invalidCursorResponse) {
+				return invalidCursorResponse;
+			}
+
+			console.error(error);
+
+			return Response.json(
+				{
+					error: "Failed to retrieve JIRA options",
+				},
+				{
+					status: 500,
+				},
+			);
+		}
+	}
+
 	if (request.method === "QUERY" && url.pathname === "/api/jiras") {
 		const query = await parseDomainQueryRequest(request, JIRA_QUERY_FILTERS);
 
