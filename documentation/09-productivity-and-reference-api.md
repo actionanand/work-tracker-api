@@ -25,7 +25,7 @@ The Notion token remains a Worker secret and must not be stored in source, docs,
 
 ## Markdown Handling
 
-Memo and Reference Library detail responses include page-body markdown. Memo writes can update that markdown body. Reference Library imports accept markdown files and create normal child pages under the configured parent page.
+Memo and Reference Library detail responses include page-body markdown. Memo writes update that markdown body synchronously. Reference Library imports accept markdown files and create normal child pages under the configured parent page using their existing asynchronous import flow.
 
 ## API References
 
