@@ -21,4 +21,4 @@ Supported filters are `categories`, `tags`, `pinned`, and `q`. Multiple tags are
 
 ## Writes
 
-Writable fields are `memo`, `categoryOptionId`, `tagOptionIds`, `pinned`, and `markdown`. `markdown` is written to the Notion page body, not to a rich text property.
+Writable fields are `memo`, `categoryOptionId`, `tagOptionIds`, `pinned`, and `markdown`. `markdown` is written synchronously to the Notion page body, not to a rich text property.

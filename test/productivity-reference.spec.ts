@@ -459,6 +459,73 @@ describe("Productivity and Reference Library APIs", () => {
 		});
 	});
 
+	it("creates Memos with markdown synchronously", async () => {
+		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+			if (url.endsWith(`/data_sources/${testEnv.MEMOS_DATA_SOURCE_ID}`)) {
+				return Promise.resolve(
+					schemaResponse({
+						Category: selectSchema({ Command: "category-command" }),
+						Tags: multiSelectSchema({ "CI/CD": "tag-cicd", Info: "tag-info" }),
+					}),
+				);
+			}
+			if (url.endsWith("/v1/pages") && init?.method === "POST") {
+				return Promise.resolve(
+					Response.json(
+						memoPage({
+							properties: {
+								Memo: { title: [{ plain_text: "API memo" }] },
+								Category: { select: { name: "Command" } },
+								Tags: { multi_select: [{ name: "CI/CD" }, { name: "Info" }] },
+								Pinned: { checkbox: true },
+							},
+						}),
+					),
+				);
+			}
+			return Promise.resolve(Response.json({}));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/memos",
+			jsonRequest("POST", {
+				memo: "API memo",
+				categoryOptionId: "category-command",
+				tagOptionIds: ["tag-cicd", "tag-info"],
+				pinned: true,
+				markdown: "# Test\n\nSome markdown",
+			}),
+		);
+		const createBody = JSON.parse(
+			String(
+				fetchMock.mock.calls.find(
+					([url, init]) => String(url).endsWith("/v1/pages") && init?.method === "POST",
+				)?.[1]?.body,
+			),
+		);
+
+		expect(response.status).toBe(201);
+		expect(await response.json()).toMatchObject({
+			data: {
+				memo: "API memo",
+				markdown: "# Test\n\nSome markdown",
+				pinned: true,
+			},
+		});
+		expect(createBody).toMatchObject({
+			parent: { data_source_id: testEnv.MEMOS_DATA_SOURCE_ID },
+			properties: {
+				Memo: { title: [{ text: { content: "API memo" } }] },
+				Category: { select: { id: "category-command" } },
+				Tags: { multi_select: [{ id: "tag-cicd" }, { id: "tag-info" }] },
+				Pinned: { checkbox: true },
+			},
+			markdown: "# Test\n\nSome markdown",
+		});
+		expect(createBody).not.toHaveProperty("allow_async");
+	});
+
 	it("queries and updates Memos without treating markdown as a rich_text property", async () => {
 		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
 			if (String(url).includes(`/data_sources/${testEnv.MEMOS_DATA_SOURCE_ID}/query`)) {
@@ -496,8 +563,10 @@ describe("Productivity and Reference Library APIs", () => {
 		const patch = await fetchWorker(
 			`/api/memos/${memoPageId}`,
 			jsonRequest("PATCH", {
+				memo: "Updated memo",
 				categoryOptionId: "category-eng",
 				tagOptionIds: ["tag-api"],
+				pinned: false,
 				markdown: "# Updated",
 			}),
 		);
@@ -534,10 +603,92 @@ describe("Productivity and Reference Library APIs", () => {
 			),
 		);
 		expect(pagePatchBody.properties.Markdown).toBeUndefined();
+		expect(pagePatchBody.properties).toMatchObject({
+			Memo: { title: [{ text: { content: "Updated memo" } }] },
+			Pinned: { checkbox: false },
+		});
 		expect(markdownPatchBody).toMatchObject({
 			type: "replace_content",
 			replace_content: { new_str: "# Updated" },
-			allow_async: true,
+		});
+		expect(markdownPatchBody).not.toHaveProperty("allow_async");
+	});
+
+	it("updates Memo markdown synchronously without metadata changes", async () => {
+		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+			if (url.endsWith(`/data_sources/${testEnv.MEMOS_DATA_SOURCE_ID}`)) {
+				return Promise.resolve(schemaResponse({}));
+			}
+			if (url.endsWith(`/v1/pages/${memoPageId}`) && init?.method === "GET") {
+				return Promise.resolve(Response.json(memoPage()));
+			}
+			if (url.endsWith(`/v1/pages/${memoPageId}/markdown`) && init?.method === "PATCH") {
+				return Promise.resolve(Response.json({ markdown: "# Updated" }));
+			}
+			return Promise.resolve(Response.json({}));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			`/api/memos/${memoPageId}`,
+			jsonRequest("PATCH", { markdown: "# Updated" }),
+		);
+		const pagePatch = fetchMock.mock.calls.find(
+			([url, init]) =>
+				String(url).endsWith(`/v1/pages/${memoPageId}`) && init?.method === "PATCH",
+		);
+		const markdownPatchBody = JSON.parse(
+			String(
+				fetchMock.mock.calls.find(
+					([url, init]) =>
+						String(url).endsWith(`/v1/pages/${memoPageId}/markdown`) &&
+						init?.method === "PATCH",
+				)?.[1]?.body,
+			),
+		);
+
+		expect(response.status).toBe(200);
+		expect(pagePatch).toBeUndefined();
+		expect(markdownPatchBody).toEqual({
+			type: "replace_content",
+			replace_content: { new_str: "# Updated" },
+		});
+	});
+
+	it("preserves intentionally empty Memo markdown", async () => {
+		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+			if (url.endsWith(`/data_sources/${testEnv.MEMOS_DATA_SOURCE_ID}`)) {
+				return Promise.resolve(schemaResponse({}));
+			}
+			if (url.endsWith(`/v1/pages/${memoPageId}`) && init?.method === "GET") {
+				return Promise.resolve(Response.json(memoPage()));
+			}
+			if (url.endsWith(`/v1/pages/${memoPageId}/markdown`) && init?.method === "PATCH") {
+				return Promise.resolve(Response.json({ markdown: "" }));
+			}
+			return Promise.resolve(Response.json({}));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			`/api/memos/${memoPageId}`,
+			jsonRequest("PATCH", { markdown: "" }),
+		);
+		const markdownPatchBody = JSON.parse(
+			String(
+				fetchMock.mock.calls.find(
+					([url, init]) =>
+						String(url).endsWith(`/v1/pages/${memoPageId}/markdown`) &&
+						init?.method === "PATCH",
+				)?.[1]?.body,
+			),
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({ data: { markdown: "" } });
+		expect(markdownPatchBody).toEqual({
+			type: "replace_content",
+			replace_content: { new_str: "" },
 		});
 	});
 

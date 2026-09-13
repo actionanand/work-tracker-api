@@ -119,7 +119,7 @@ export async function createMemo(
 		env,
 		dataSourceId: env.MEMOS_DATA_SOURCE_ID,
 		properties,
-		...(markdown !== undefined ? { markdown, allowAsync: true } : {}),
+		...(markdown !== undefined ? { markdown } : {}),
 	});
 
 	if (markdown === undefined) {
@@ -154,7 +154,7 @@ export async function updateMemo(
 		return mapMemo(page);
 	}
 
-	await updateNotionMarkdown({ env, pageId, markdown, allowAsync: true });
+	await updateNotionMarkdown({ env, pageId, markdown });
 
 	return {
 		...mapMemo(page),
