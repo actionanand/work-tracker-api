@@ -1160,11 +1160,15 @@ Do not reuse a cursor after changing:
 
 # 17. Reference Library smoke tests
 
-Reference Library is a normal Notion parent page, not a data source.
+Reference Library articles are rows in the configured Notion data source. Article content remains in each row's page body as Markdown.
 
-## List direct child pages
+## Read metadata and list articles
 
 ```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE/api/reference-library/meta" | jq
+
 curl -sS \
   -H "Authorization: Bearer $TOKEN" \
   "$API_BASE/api/reference-library?pageSize=25" | jq
@@ -1201,7 +1205,7 @@ curl -sS \
 
 Verify:
 
-- title;
+- article, category, and tags;
 - Markdown body;
 - created/edited timestamps;
 - truncation information if provided;
@@ -1230,7 +1234,7 @@ echo "Hello from WSL2"
 - API authentication works
 - Multipart upload works
 - Markdown import works
-- New Notion child page is created
+- New Notion article row is created
 
 **Important:** delete this test page from Notion after verification if no longer needed.
 EOF
@@ -1248,7 +1252,10 @@ Upload:
 curl -i -X POST \
   "$API_BASE/api/reference-library/import" \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/tmp/reference-api-smoke-test.md;type=text/markdown"
+  -F "file=@/tmp/reference-api-smoke-test.md;type=text/markdown" \
+  -F "title=Reference Library Smoke Test" \
+  -F "categoryOptionId=$REFERENCE_CATEGORY_OPTION_ID" \
+  -F "tagOptionIds=$REFERENCE_TAG_OPTION_ID"
 ```
 
 Possible outcomes:
@@ -1269,7 +1276,7 @@ Notion accepted an asynchronous Markdown write.
 
 If `202` is returned, inspect the response for the task/poll identifier and use the polling endpoint documented by the current implementation.
 
-After success, verify the new page appears below the Notion `Reference Library` parent page.
+Before running the metadata-bearing import, set option IDs returned by `/api/reference-library/meta`. After success, verify the new article row appears in the Notion Articles data source.
 
 ---
 
@@ -1385,8 +1392,43 @@ curl -sS -X QUERY \
   --data '{
     "filters": {},
     "pageSize": 25
+}' | jq
+```
+
+JIRA create metadata:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE/api/jiras/meta" | jq
+```
+
+The metadata response supplies live Status and Tag option IDs. Project choices can be read from `GET /api/projects/active`.
+
+Create a simple JIRA:
+
+> This creates a real Notion JIRA row. Use a temporary, unique JIRA key and remove the row manually after testing.
+
+```bash
+curl -sS -X POST \
+  "$API_BASE/api/jiras" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "jiraKey": "LSC-99999",
+    "summary": "Temporary API smoke-test JIRA",
+    "projectId": null,
+    "statusOptionId": null,
+    "inActiveSprint": false,
+    "tagOptionIds": [],
+    "demoRequired": false,
+    "appraisal": false
   }' | jq
 ```
+
+To test live Status or Tags, replace the nullable/empty values with IDs returned by `/api/jiras/meta`. To test Project ownership, use an ID returned by `/api/projects/active`.
+
+Repeat with a second unique key and `"inActiveSprint": true`. Verify in Notion that its `Sprints` relation contains the one current active Sprint, the `In Active Sprint` formula evaluates to true, and no Sprint Allocation row was created. Reusing either temporary key should return HTTP 409 without creating another row.
 
 ---
 

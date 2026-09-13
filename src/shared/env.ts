@@ -30,5 +30,5 @@ export interface Env {
 	TODOS_DATA_SOURCE_ID: string;
 	TASKS_DATA_SOURCE_ID: string;
 	MEMOS_DATA_SOURCE_ID: string;
-	REFERENCE_LIBRARY_PAGE_ID: string;
+	REFERENCE_LIBRARY_DATA_SOURCE_ID: string;
 }

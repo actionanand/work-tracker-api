@@ -326,7 +326,7 @@ Store long Memo and Reference Library content in Notion page-body markdown, not 
 
 **Reason**
 
-Page-body markdown better matches note/reference content and keeps data-source properties focused on searchable metadata. Reference Library imports create normal child pages under the configured parent page.
+Page-body markdown better matches note/reference content and keeps data-source properties focused on searchable metadata. Reference Library imports create rows in the configured Articles data source while keeping uploaded Markdown in the page body.
 
 **Status**
 

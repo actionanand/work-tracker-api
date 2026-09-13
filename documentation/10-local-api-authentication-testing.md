@@ -189,11 +189,25 @@ curl -sS \
 curl -sS \
   -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8787/api/reference-library?pageSize=25" | jq
+
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8787/api/reference-library/meta | jq
 ```
 
 ## 8. Testing HTTP QUERY
 
 The Work Tracker API uses HTTP `QUERY` for filtered read operations.
+
+Reference Library supports `categories`, `tags`, and `q` filters:
+
+```bash
+curl -sS -X QUERY \
+  http://localhost:8787/api/reference-library \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"filters":{"categories":["Official"],"tags":["Angular"],"q":"signal"}}' | jq
+```
 
 ```bash
 curl -sS -X QUERY \

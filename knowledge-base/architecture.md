@@ -149,7 +149,7 @@ export interface Env {
   TODOS_DATA_SOURCE_ID: string;
   TASKS_DATA_SOURCE_ID: string;
   MEMOS_DATA_SOURCE_ID: string;
-  REFERENCE_LIBRARY_PAGE_ID: string;
+  REFERENCE_LIBRARY_DATA_SOURCE_ID: string;
 }
 ```
 
@@ -165,7 +165,7 @@ export interface Env {
 - safe page-property builders for selected write endpoints
 - page ownership checks before PATCH and trash operations
 - page-body markdown reads and writes
-- Reference Library parent-page child listing and async markdown import polling
+- Reference Library data-source listing, filtering, page-body Markdown reads, and async import polling
 
 `src/shared/http/` centralizes request helpers:
 

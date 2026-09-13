@@ -41,7 +41,7 @@ const testEnv: Env = {
 	TODOS_DATA_SOURCE_ID: "test-todos-data-source-id",
 	TASKS_DATA_SOURCE_ID: "test-tasks-data-source-id",
 	MEMOS_DATA_SOURCE_ID: "test-memos-data-source-id",
-	REFERENCE_LIBRARY_PAGE_ID: "test-reference-library-page-id",
+	REFERENCE_LIBRARY_DATA_SOURCE_ID: "test-reference-library-data-source-id",
 };
 
 const companyId = "11111111-1111-1111-1111-111111111111";
@@ -218,7 +218,7 @@ describe("QUERY, write, and metadata API support", () => {
 		["/api/work-logs", "GET, QUERY, POST, OPTIONS"],
 		["/api/feedback", "GET, QUERY, POST, OPTIONS"],
 		["/api/work-links", "GET, QUERY, POST, OPTIONS"],
-		["/api/jiras", "GET, QUERY, OPTIONS"],
+		["/api/jiras", "GET, QUERY, POST, OPTIONS"],
 	])(
 		"advertises accurate QUERY support on CORS preflight for %s",
 		async (path, allow) => {

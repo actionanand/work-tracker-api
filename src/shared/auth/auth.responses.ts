@@ -116,6 +116,7 @@ export function corsPreflightResponse(pathname = ""): Response {
 		"/api/todos",
 		"/api/tasks",
 		"/api/memos",
+		"/api/reference-library",
 	].includes(pathname);
 	const allow = allowHeaderForPath(pathname);
 
@@ -132,7 +133,11 @@ export function corsPreflightResponse(pathname = ""): Response {
 
 function allowHeaderForPath(pathname: string): string | null {
 	if (pathname === "/api/jiras") {
-		return "GET, QUERY, OPTIONS";
+		return "GET, QUERY, POST, OPTIONS";
+	}
+
+	if (pathname === "/api/jiras/meta") {
+		return "GET, OPTIONS";
 	}
 
 	if (pathname === "/api/jiras/options") {
@@ -167,7 +172,7 @@ function allowHeaderForPath(pathname: string): string | null {
 	}
 
 	if (pathname === "/api/reference-library") {
-		return "GET, OPTIONS";
+		return "GET, QUERY, OPTIONS";
 	}
 
 	if (pathname === "/api/reference-library/import") {

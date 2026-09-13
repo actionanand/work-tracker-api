@@ -1,5 +1,6 @@
 import type { Env } from "../../shared/env";
 import { parseDomainQueryRequest, withAcceptQuery } from "../../shared/http/http-query";
+import { isRecord, parseJsonRequestBody } from "../../shared/http/request-body";
 import {
 	parseBooleanValue,
 	invalidRequest,
@@ -8,6 +9,7 @@ import {
 	parseStringValue,
 } from "../../shared/http/validation";
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
+import { buildResourceMetadata } from "../../shared/notion/notion-schema";
 import {
 	invalidPaginationCursorResponse,
 	parsePaginationParams,
@@ -15,12 +17,17 @@ import {
 import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { combineJiraFilters, jiraFilters } from "./jira.filters";
 import {
+	ActiveSprintConfigurationError,
 	DuplicateJiraKeyError,
+	JiraAlreadyExistsError,
 	JiraNotFoundError,
+	JiraWriteValidationError,
+	createJira,
 	getJiraByKey,
 	listJiraOptions,
 	listJiras,
 } from "./jira.service";
+import { normalizeJiraKey } from "./jira.validation";
 
 const jiraRouteFilters = new Map<string, NotionQueryFilter | undefined>([
 	["/api/jiras", undefined],
@@ -114,11 +121,84 @@ function noStore(response: Response): Response {
 	});
 }
 
+async function parseMutationBody(
+	request: Request,
+): Promise<Record<string, unknown> | Response> {
+	const parsed = await parseJsonRequestBody(request);
+
+	if (parsed instanceof Response) return parsed;
+	if (!isRecord(parsed.value)) return invalidRequest("Expected a JSON object");
+
+	return parsed.value;
+}
+
 export async function handleJiraRoutes(
 	request: Request,
 	url: URL,
 	env: Env,
 ): Promise<Response | null> {
+	if (request.method === "GET" && url.pathname === "/api/jiras/meta") {
+		const metadata = await buildResourceMetadata(
+			env,
+			env.JIRAS_DATA_SOURCE_ID,
+			"jiras",
+			[
+				{ key: "jiraKey", property: "JIRA Key", writable: true },
+				{ key: "summary", property: "Summary", writable: true },
+				{
+					key: "projectId",
+					property: "Project",
+					writable: true,
+					optionsEndpoint: "/api/projects/active",
+				},
+				{ key: "statusOptionId", property: "Status", writable: true },
+				{ key: "tagOptionIds", property: "Tags", writable: true },
+				{ key: "demoRequired", property: "Demo Required", writable: true },
+				{ key: "appraisal", property: "Appraisal", writable: true },
+			],
+		);
+
+		metadata.fields.splice(4, 0, {
+			key: "inActiveSprint",
+			label: "In Active Sprint",
+			type: "checkbox",
+			writable: true,
+		});
+
+		return Response.json(metadata);
+	}
+
+	if (request.method === "POST" && url.pathname === "/api/jiras") {
+		const body = await parseMutationBody(request);
+		if (body instanceof Response) return body;
+
+		try {
+			return noStore(
+				Response.json({ data: await createJira(env, body) }, { status: 201 }),
+			);
+		} catch (error) {
+			if (error instanceof JiraWriteValidationError) return error.response;
+
+			if (error instanceof JiraAlreadyExistsError) {
+				return Response.json(
+					{ error: "JIRA already exists", field: "jiraKey" },
+					{ status: 409 },
+				);
+			}
+
+			if (error instanceof ActiveSprintConfigurationError) {
+				return Response.json(
+					{ error: error.message, field: "inActiveSprint" },
+					{ status: 409 },
+				);
+			}
+
+			console.error(error);
+
+			return Response.json({ error: "Failed to create JIRA" }, { status: 500 });
+		}
+	}
+
 	if (request.method === "QUERY" && url.pathname === "/api/jiras/options") {
 		const query = await parseDomainQueryRequest(
 			request,
@@ -332,5 +412,5 @@ function parseJiraKeyPath(pathname: string): string | null {
 		return null;
 	}
 
-	return /^[A-Za-z][A-Za-z0-9]+-\d+$/.test(jiraKey) ? jiraKey : null;
+	return normalizeJiraKey(jiraKey);
 }
