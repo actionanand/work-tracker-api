@@ -97,6 +97,14 @@ export function validateOptionId(
 	return getOptions(properties[property]).some((option) => option.id === optionId);
 }
 
+export function getOptionNameById(
+	properties: Record<string, NotionPropertySchema>,
+	property: string,
+	optionId: string,
+): string | null {
+	return getOptions(properties[property]).find((option) => option.id === optionId)?.name ?? null;
+}
+
 function getOptions(
 	property: NotionPropertySchema | undefined,
 ): Array<{ id: string; name: string; color: string }> {

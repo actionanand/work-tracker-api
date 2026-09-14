@@ -43,6 +43,10 @@ type TestD1Result = {
 	results?: TestAuthSessionRow[];
 };
 
+interface TestWorkCalendarState {
+	weekOffDaysJson: string | null;
+}
+
 class TestD1PreparedStatement {
 	private params: unknown[] = [];
 
@@ -50,6 +54,7 @@ class TestD1PreparedStatement {
 		private readonly sql: string,
 		private readonly rows: Map<string, TestAuthSessionRow>,
 		private readonly operations: string[],
+		private readonly workCalendar: TestWorkCalendarState,
 	) {}
 
 	bind(...params: unknown[]): TestD1PreparedStatement {
@@ -60,6 +65,12 @@ class TestD1PreparedStatement {
 
 	async first<T = unknown>(): Promise<T | null> {
 		this.operations.push(this.sql);
+
+		if (this.sql.includes("FROM work_calendar_settings")) {
+			return (this.workCalendar.weekOffDaysJson === null
+				? null
+				: { week_off_days: this.workCalendar.weekOffDaysJson }) as T | null;
+		}
 
 		if (this.sql.includes("FROM auth_sessions") && this.sql.includes("WHERE id = ?1")) {
 			const [id, subject, allowExpired, nowSeconds] = this.params;
@@ -110,7 +121,10 @@ class TestD1PreparedStatement {
 		this.operations.push(this.sql);
 		let changes = 0;
 
-		if (this.sql.includes("INSERT INTO auth_sessions")) {
+		if (this.sql.includes("INSERT INTO work_calendar_settings")) {
+			this.workCalendar.weekOffDaysJson = String(this.params[0]);
+			changes = 1;
+		} else if (this.sql.includes("INSERT INTO auth_sessions")) {
 			const [
 				id,
 				subject,
@@ -211,19 +225,23 @@ class TestD1PreparedStatement {
 export interface TestAuthD1Database extends D1Database {
 	readonly rows: Map<string, TestAuthSessionRow>;
 	readonly operations: string[];
+	readonly workCalendar: TestWorkCalendarState;
 }
 
 export function createTestAuthDb(
 	initialRows: TestAuthSessionRow[] = [],
+	initialWeekOffDaysJson: string | null = null,
 ): TestAuthD1Database {
 	const rows = new Map(initialRows.map((row) => [row.id, { ...row }]));
 	const operations: string[] = [];
+	const workCalendar: TestWorkCalendarState = { weekOffDaysJson: initialWeekOffDaysJson };
 
 	return {
 		rows,
 		operations,
+		workCalendar,
 		prepare(sql: string) {
-			return new TestD1PreparedStatement(sql, rows, operations);
+			return new TestD1PreparedStatement(sql, rows, operations, workCalendar);
 		},
 	} as unknown as TestAuthD1Database;
 }

@@ -30,6 +30,12 @@ export function checkboxProperty(value: boolean): unknown {
 	};
 }
 
+export function numberProperty(value: number | null): unknown {
+	return {
+		number: value,
+	};
+}
+
 export function selectByIdProperty(optionId: string | null): unknown {
 	return {
 		select: optionId ? { id: optionId } : null,

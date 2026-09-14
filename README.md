@@ -244,6 +244,8 @@ Layer responsibilities:
 | `PATCH` | `/api/todos/:pageId` | Update a To Do page after page ownership validation. |
 | `DELETE` | `/api/todos/:pageId` | Move a To Do page to Notion trash after page ownership validation. |
 | `POST` | `/api/todos/bulk-delete` | Move a validated batch of To Do pages to Notion trash. |
+| `GET` | `/api/settings/work-calendar` | Read configured weekly week-off days, defaulting to Saturday and Sunday. |
+| `PATCH` | `/api/settings/work-calendar` | Replace weekly week-off days in the existing D1 database. |
 | `GET` | `/api/tasks/meta` | Dynamic Task field metadata from the Notion data-source schema. |
 | `GET` | `/api/tasks` | Tasks and follow-ups from the configured Notion data source. |
 | `QUERY` | `/api/tasks` | JSON-body read query for Tasks with server-side Notion filtering. |
@@ -278,7 +280,7 @@ Selected endpoints support optional shallow relation enrichment with `include=re
 
 `QUERY /api/jiras/options` is a lightweight picker endpoint. With no `q`, or an empty/whitespace `q`, it returns only current active-sprint JIRAs. With a non-empty `q`, it searches all JIRAs by `JIRA Key` or `Summary`, including historical and non-sprint JIRAs. It returns only `id`, `jiraKey`, `summary`, `status`, and `inActiveSprint`.
 
-Write endpoints are intentionally allow-listed. They accept only documented mapped fields, validate Notion status/select/multi-select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion. Delete endpoints move owned pages to Notion trash; they do not hard-delete data.
+Write endpoints are intentionally allow-listed. They accept only documented mapped fields, validate Notion status/select/multi-select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion. Todo writes also validate the complete recurrence state and clear incompatible fields when the schedule type changes. Delete endpoints move owned pages to Notion trash; they do not hard-delete data.
 
 ## API Pagination
 
@@ -409,7 +411,7 @@ Configure non-secret IDs in `wrangler.jsonc`:
 }
 ```
 
-Create and bind the D1 database used for active authentication sessions. This stores session/device metadata only; it must not store passwords, password hashes, JWTs, JWT IDs, JWT secrets, or Notion tokens.
+Create and bind the D1 database used for active authentication sessions and the singleton work-calendar setting. It must not store passwords, password hashes, JWTs, JWT IDs, JWT secrets, or Notion tokens.
 
 ```bash
 npx wrangler d1 create work-tracker-auth
@@ -489,6 +491,8 @@ curl -s -X QUERY http://localhost:8787/api/jiras/options -H "Authorization: Bear
 curl -s -X QUERY http://localhost:8787/api/jiras/options -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"q":"CRI-"},"pageSize":20}' | jq
 curl -s -X POST http://localhost:8787/api/jiras -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"jiraKey":"LSC-99999","summary":"Temporary API JIRA","projectId":null,"statusOptionId":null,"inActiveSprint":false,"tagOptionIds":[],"demoRequired":false,"appraisal":false}' | jq
 curl -s -X QUERY http://localhost:8787/api/todos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"statuses":["In progress"],"dueOnOrBefore":"2026-09-30"}}' | jq
+curl -s -X QUERY http://localhost:8787/api/todos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"showToday":true}}' | jq
+curl -s http://localhost:8787/api/settings/work-calendar -H "Authorization: Bearer $TOKEN" | jq
 curl -s -X QUERY http://localhost:8787/api/tasks -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"priorities":["High"],"companyIds":["company-page-id"]},"includeRelations":true}' | jq
 curl -s -X QUERY http://localhost:8787/api/memos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"filters":{"tags":["api"],"pinned":true}}' | jq
 curl -s http://localhost:8787/api/reference-library -H "Authorization: Bearer $TOKEN" | jq
