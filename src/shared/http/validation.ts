@@ -92,6 +92,20 @@ export function parseBooleanValue(
 	return value;
 }
 
+export function parseNumberValue(
+	value: unknown,
+	field: string,
+): number | null | Response | undefined {
+	if (value === undefined) return undefined;
+	if (value === null) return null;
+
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return invalidRequest("Expected a finite number", field);
+	}
+
+	return value;
+}
+
 export function parseNotionIdValue(
 	value: unknown,
 	field: string,

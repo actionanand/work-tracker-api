@@ -5,6 +5,7 @@ import { isRecord, parseJsonRequestBody } from "../../shared/http/request-body";
 import {
 	invalidNotionId,
 	invalidRequest,
+	parseBooleanValue,
 	parseDateValue,
 	parseStringArrayValue,
 	parseStringValue,
@@ -17,6 +18,7 @@ import {
 	parsePaginationParams,
 } from "../../shared/pagination/pagination";
 import { combineTodoFilters, todoFilters } from "./todo.filters";
+import { TODO_SCHEDULES } from "./todo.constants";
 import {
 	TodoNotWritableError,
 	TodoWriteValidationError,
@@ -34,7 +36,13 @@ const TODO_QUERY_FILTERS = new Set([
 	"dueBefore",
 	"dueOnOrBefore",
 	"q",
+	"schedules",
+	"recurring",
+	"showToday",
+	"workdayAdjust",
+	"hasSetupIssue",
 ]);
+const TODO_SCHEDULE_FILTER_VALUES = new Set<string>(TODO_SCHEDULES);
 
 function noStore(response: Response): Response {
 	const headers = new Headers(response.headers);
@@ -85,6 +93,21 @@ function buildBodyFilter(filters: Record<string, unknown>): ReturnType<typeof co
 	const q = parseStringValue(filters.q, "q");
 	if (q instanceof Response) return q;
 
+	const schedules = parseStringArrayValue(filters.schedules, "schedules");
+	if (schedules instanceof Response) return schedules;
+	if (schedules?.some((schedule) => !TODO_SCHEDULE_FILTER_VALUES.has(schedule))) {
+		return invalidRequest("Expected Daily, Weekly, Monthly, or Yearly", "schedules");
+	}
+
+	const recurring = parseBooleanValue(filters.recurring, "recurring");
+	if (recurring instanceof Response) return recurring;
+	const showToday = parseBooleanValue(filters.showToday, "showToday");
+	if (showToday instanceof Response) return showToday;
+	const workdayAdjust = parseBooleanValue(filters.workdayAdjust, "workdayAdjust");
+	if (workdayAdjust instanceof Response) return workdayAdjust;
+	const hasSetupIssue = parseBooleanValue(filters.hasSetupIssue, "hasSetupIssue");
+	if (hasSetupIssue instanceof Response) return hasSetupIssue;
+
 	return combineTodoFilters([
 		statuses ? todoFilters.statuses(statuses) : undefined,
 		dueFrom ? todoFilters.dueFrom(dueFrom) : undefined,
@@ -92,6 +115,11 @@ function buildBodyFilter(filters: Record<string, unknown>): ReturnType<typeof co
 		dueBefore ? todoFilters.dueBefore(dueBefore) : undefined,
 		dueOnOrBefore ? todoFilters.dueOnOrBefore(dueOnOrBefore) : undefined,
 		q ? todoFilters.q(q) : undefined,
+		schedules ? todoFilters.schedules(schedules) : undefined,
+		recurring === undefined ? undefined : todoFilters.recurring(recurring),
+		showToday === undefined ? undefined : todoFilters.showToday(showToday),
+		workdayAdjust === undefined ? undefined : todoFilters.workdayAdjust(workdayAdjust),
+		hasSetupIssue === undefined ? undefined : todoFilters.hasSetupIssue(hasSetupIssue),
 	]);
 }
 
@@ -108,8 +136,19 @@ export async function handleTodoRoutes(
 				{ key: "dueDate", property: "Due Date", writable: true },
 				{ key: "assignee", property: "Assignee", writable: false },
 				{ key: "notes", property: "Notes", writable: true },
+				{ key: "scheduleOptionId", property: "Schedule", writable: true },
+				{ key: "repeatOnOptionIds", property: "Repeat On", writable: true },
+				{ key: "interval", property: "Interval", writable: true },
+				{ key: "repeatDay", property: "Repeat Day", writable: true },
+				{ key: "repeatMonthOptionId", property: "Repeat Month", writable: true },
+				{ key: "monthEndOptionId", property: "Month End", writable: true },
+				{ key: "repeatStart", property: "Repeat Start", writable: true },
+				{ key: "workdayAdjust", property: "Workday Adjust", writable: true },
 				{ key: "created", property: "Created", writable: false },
 				{ key: "lastEdited", property: "Last Edited", writable: false },
+				{ key: "recurring", property: "Recurring", writable: false },
+				{ key: "showToday", property: "Show Today", writable: false },
+				{ key: "setupIssue", property: "Setup Issue", writable: false },
 			]),
 		);
 	}

@@ -42,4 +42,27 @@ export const todoFilters = {
 	q(value: string): NotionQueryFilter {
 		return { property: "To Do", title: { contains: value } };
 	},
+	schedules(schedules: string[]): NotionQueryFilter | undefined {
+		return orFilters(
+			schedules.map((schedule) => ({
+				property: "Schedule",
+				select: { equals: schedule },
+			})),
+		);
+	},
+	recurring(value: boolean): NotionQueryFilter {
+		return { property: "Recurring", formula: { checkbox: { equals: value } } };
+	},
+	showToday(value: boolean): NotionQueryFilter {
+		return { property: "Show Today", formula: { checkbox: { equals: value } } };
+	},
+	workdayAdjust(value: boolean): NotionQueryFilter {
+		return { property: "Workday Adjust", checkbox: { equals: value } };
+	},
+	hasSetupIssue(value: boolean): NotionQueryFilter {
+		return {
+			property: "Setup Issue",
+			formula: { string: value ? { is_not_empty: true } : { is_empty: true } },
+		};
+	},
 };

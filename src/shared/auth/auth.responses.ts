@@ -152,6 +152,10 @@ function allowHeaderForPath(pathname: string): string | null {
 		return "GET, QUERY, POST, OPTIONS";
 	}
 
+	if (pathname === "/api/settings/work-calendar") {
+		return "GET, PATCH, OPTIONS";
+	}
+
 	if (
 		["/api/todos/bulk-delete", "/api/tasks/bulk-delete", "/api/memos/bulk-delete"].includes(
 			pathname,
