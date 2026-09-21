@@ -48,6 +48,10 @@ const JIRA_QUERY_FILTERS = new Set([
 	"spillover",
 	"appraisal",
 	"demoRequired",
+	"linkedJiraIds",
+	"linkedFromIds",
+	"linkTypes",
+	"resolved",
 	"q",
 ]);
 
@@ -67,6 +71,21 @@ function buildBodyFilter(filters: Record<string, unknown>): NotionQueryFilter | 
 	const projectIds = parseNotionIdArrayValue(filters.projectIds, "projectIds");
 	if (projectIds instanceof Response) return projectIds;
 
+	const linkedJiraIds = parseNotionIdArrayValue(
+		filters.linkedJiraIds,
+		"linkedJiraIds",
+	);
+	if (linkedJiraIds instanceof Response) return linkedJiraIds;
+
+	const linkedFromIds = parseNotionIdArrayValue(
+		filters.linkedFromIds,
+		"linkedFromIds",
+	);
+	if (linkedFromIds instanceof Response) return linkedFromIds;
+
+	const linkTypes = parseStringArrayValue(filters.linkTypes, "linkTypes");
+	if (linkTypes instanceof Response) return linkTypes;
+
 	const inActiveSprint = parseBooleanValue(filters.inActiveSprint, "inActiveSprint");
 	if (inActiveSprint instanceof Response) return inActiveSprint;
 
@@ -79,6 +98,9 @@ function buildBodyFilter(filters: Record<string, unknown>): NotionQueryFilter | 
 	const demoRequired = parseBooleanValue(filters.demoRequired, "demoRequired");
 	if (demoRequired instanceof Response) return demoRequired;
 
+	const resolved = parseBooleanValue(filters.resolved, "resolved");
+	if (resolved instanceof Response) return resolved;
+
 	const query = parseStringValue(filters.q, "q");
 	if (query instanceof Response) return query;
 
@@ -87,6 +109,9 @@ function buildBodyFilter(filters: Record<string, unknown>): NotionQueryFilter | 
 		tags ? jiraFilters.tags(tags) : undefined,
 		sprintIds ? jiraFilters.sprints(sprintIds) : undefined,
 		projectIds ? jiraFilters.projects(projectIds) : undefined,
+		linkedJiraIds ? jiraFilters.linkedJiras(linkedJiraIds) : undefined,
+		linkedFromIds ? jiraFilters.linkedFromMany(linkedFromIds) : undefined,
+		linkTypes ? jiraFilters.linkTypes(linkTypes) : undefined,
 		typeof inActiveSprint === "boolean"
 			? jiraFilters.inActiveSprintValue(inActiveSprint)
 			: undefined,
@@ -95,6 +120,7 @@ function buildBodyFilter(filters: Record<string, unknown>): NotionQueryFilter | 
 		typeof demoRequired === "boolean"
 			? jiraFilters.demoRequiredValue(demoRequired)
 			: undefined,
+		typeof resolved === "boolean" ? jiraFilters.resolved(resolved) : undefined,
 		query ? jiraFilters.query(query) : undefined,
 	]);
 }

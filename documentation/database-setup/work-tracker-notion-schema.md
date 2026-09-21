@@ -371,10 +371,16 @@ External dependency tickets do **not** need to belong to your sprint.
 | `Sprints` | Relation → Sprints | No | No limit; one-way; keeps complete sprint history |
 | `Spillover` | Formula | Derived | True when Jira has >1 Sprint |
 | `Spillover Count` | Formula | Derived | Number of sprint transitions |
-| `Spillover Reason` | Text | No | Why the ticket moved to another sprint |
+| `Description` | Text | No | JIRA description; this replaces the retired JIRA-level spill reason |
+| `First Sprint Start` | Formula | Derived | Formula date for the earliest related Sprint start date |
 | `Appraisal` | Checkbox | No | Jira worth quoting in appraisal |
 | `In Active Sprint` | Formula | Derived | True if any related Sprint has `Active = checked` |
-| `Blocked By` | Relation → JIRAs | No | Self-relation; one-way; no limit |
+| `Linked JIRA` | Relation → JIRAs | No | Source-to-target self relation; metadata belongs to this source row |
+| `Linked From` | Relation ← JIRAs | Derived | Reciprocal back-reference; do not author separately |
+| `Link Type` | Select | No | Exactly `Blocks`, `Dependency for`, or `Related to` |
+| `Link Reason` | Text | No | Optional source relationship rationale |
+| `Linked On` | Date | No | Source relationship creation date |
+| `Resolved On` | Date | No | Historical relationship resolution date; resolved links remain visible |
 | `Tags` | Multi-select | No | Existing Jira classification tags |
 | `Demo Required` | Checkbox | No | Ticket must be demonstrated |
 | `Demoed Date` | Date | No | Date the demo was completed |
@@ -405,12 +411,12 @@ prop("Sprints").length() > 1
 max(prop("Sprints").length() - 1, 0)
 ```
 
-## Blocked By example
+## JIRA relationship example
 
 ```text
 CRI-1234
-Status = Blocked
-Blocked By = DEVOPS-567
+Linked JIRA = DEVOPS-567
+Link Type = Blocks
 ```
 
 ## Tags
@@ -535,6 +541,10 @@ Do not overwrite the older allocation.
 | `Planned Days` | Number | Yes | Fresh estimate for this Jira in this Sprint |
 | `Notes` | Text | No | Optional allocation note |
 | `Sprint Active` | Rollup | Derived | `Sprint → Active` |
+| `Spill Reason` | Text | No | Reason for the transition into this receiving allocation |
+| `Spilled` | Formula | Derived | False for the first allocation and true for later allocations |
+| `Sprint Start` | Rollup | Derived | Rollup date from the related Sprint start date |
+| `First Sprint Start` | Formula | Derived | Formula date for the earliest Sprint start date for the related JIRA |
 
 ## Sprint relation settings
 
@@ -842,7 +852,7 @@ Stores important reusable office/project links and avoids hard-coding Jira base 
 | Sprints.Project | Projects | many-to-one | Relation, one-way | No |
 | JIRAs.Project | Projects | many-to-one | Relation, one-way | No |
 | JIRAs.Sprints | Sprints | many-to-many | Relation, no limit, one-way | No |
-| JIRAs.Blocked By | JIRAs | many-to-many self relation | One-way | No reverse |
+| JIRAs.Linked JIRA | JIRAs | many-to-many self relation | Source-to-target with reciprocal | `JIRAs.Linked From` |
 | Release Items.JIRAs | JIRAs | many-to-one | limit 1, two-way ON | `JIRAs.Release Items` |
 | Sprint Allocation.Sprint | Sprints | many-to-one | limit 1, two-way ON | `Sprints.Allocations` |
 | Sprint Allocation.JIRA | JIRAs | many-to-one | limit 1, one-way | No |
@@ -953,7 +963,7 @@ Release Items.JIRAs
 1. Create Jira row.
 2. Leave Sprints empty.
 3. Apply relevant existing tags such as `Dependency`, `DevOps`, `DB Team`, `Platform / Infra`, `Prod Support`, `Non-prod Support`, or `Editorial Team`.
-4. Link from the blocked Jira using `Blocked By`.
+4. Link from the source JIRA using `Linked JIRA` and set the exact `Link Type`.
 5. It remains outside bandwidth calculation unless intentionally added to your Sprint.
 
 ## Demo tracking

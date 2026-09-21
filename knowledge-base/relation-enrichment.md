@@ -54,7 +54,7 @@ interface JiraRef {
 }
 ```
 
-No recursive expansion is performed. For example, a JIRA can include `projects`, `sprints`, and `blockedBy`, but `blockedBy` JIRAs are not recursively enriched.
+No recursive expansion is performed. For example, a JIRA can include `projects`, `sprints`, `linkedJiras`, and `linkedFrom`, but linked JIRAs are not recursively enriched.
 
 ## N+1 Avoidance
 

@@ -9,6 +9,7 @@ interface NotionRelationItem {
 interface RollupArrayItem {
 	type?: string;
 	checkbox?: boolean | null;
+	date?: { start?: string | null } | null;
 	formula?: {
 		type?: string;
 		boolean?: boolean | null;
@@ -18,6 +19,7 @@ interface RollupArrayItem {
 interface SprintActiveRollup {
 	type?: string;
 	checkbox?: boolean | null;
+	date?: { start?: string | null } | null;
 	array?: RollupArrayItem[];
 }
 
@@ -25,6 +27,11 @@ interface NotionSprintAllocationProperty {
 	title?: NotionTextItem[];
 	rich_text?: NotionTextItem[];
 	number?: number | null;
+	date?: { start?: string | null } | null;
+	formula?: {
+		boolean?: boolean | null;
+		date?: { start?: string | null } | null;
+	};
 	relation?: NotionRelationItem[];
 	rollup?: SprintActiveRollup | null;
 }
@@ -42,6 +49,10 @@ export interface SprintAllocation {
 	sprintIds: string[];
 	jiraIds: string[];
 	sprintActive: boolean;
+	spillReason: string;
+	spilled: boolean;
+	sprintStart: string | null;
+	firstSprintStart: string | null;
 }
 
 function plainText(items: NotionTextItem[] = []): string {
@@ -80,6 +91,18 @@ function rollupBoolean(property: NotionSprintAllocationProperty | undefined): bo
 	return false;
 }
 
+function notionDate(property: NotionSprintAllocationProperty | undefined): string | null {
+	if (property?.date?.start) return property.date.start;
+	if (property?.formula?.date?.start) return property.formula.date.start;
+	if (property?.rollup?.date?.start) return property.rollup.date.start;
+
+	for (const item of property?.rollup?.array ?? []) {
+		if (item.date?.start) return item.date.start;
+	}
+
+	return null;
+}
+
 export function mapSprintAllocation(
 	page: NotionSprintAllocationPage,
 ): SprintAllocation {
@@ -93,6 +116,10 @@ export function mapSprintAllocation(
 		sprintIds: relationIds(p.Sprint),
 		jiraIds: relationIds(p.JIRA),
 		sprintActive: rollupBoolean(p["Sprint Active"]),
+		spillReason: plainText(p["Spill Reason"]?.rich_text),
+		spilled: p.Spilled?.formula?.boolean ?? false,
+		sprintStart: notionDate(p["Sprint Start"]),
+		firstSprintStart: notionDate(p["First Sprint Start"]),
 	};
 }
 

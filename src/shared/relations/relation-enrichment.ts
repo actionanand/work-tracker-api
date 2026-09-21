@@ -124,7 +124,8 @@ export async function enrichSprints(
 export type EnrichedJira = Jira & {
 	projects: ProjectRef[];
 	sprints: SprintRef[];
-	blockedBy: JiraRef[];
+	linkedJiras: JiraRef[];
+	linkedFrom: JiraRef[];
 };
 
 export async function enrichJiras(
@@ -133,18 +134,21 @@ export async function enrichJiras(
 ): Promise<EnrichedJira[]> {
 	const projectIds = uniqueIds(jiras.map((jira) => jira.projectIds));
 	const sprintIds = uniqueIds(jiras.map((jira) => jira.sprintIds));
-	const blockedByIds = uniqueIds(jiras.map((jira) => jira.blockedByIds));
-	const [projects, sprints, blockedBy] = await Promise.all([
+	const linkedJiraIds = uniqueIds(jiras.map((jira) => jira.linkedJiraIds));
+	const linkedFromIds = uniqueIds(jiras.map((jira) => jira.linkedFromIds));
+	const linkedRelationIds = uniqueIds([linkedJiraIds, linkedFromIds]);
+	const [projects, sprints, linkedJiraCatalog] = await Promise.all([
 		loadCatalogIfNeeded(projectIds, () => loadProjectCatalog(env)),
 		loadCatalogIfNeeded(sprintIds, () => loadSprintCatalog(env)),
-		loadCatalogIfNeeded(blockedByIds, () => loadJiraCatalog(env)),
+		loadCatalogIfNeeded(linkedRelationIds, () => loadJiraCatalog(env)),
 	]);
 
 	return jiras.map((jira) => ({
 		...jira,
 		projects: resolveRefs(jira.projectIds, projects),
 		sprints: sortSprintRefs(resolveRefs(jira.sprintIds, sprints)),
-		blockedBy: resolveRefs(jira.blockedByIds, blockedBy),
+		linkedJiras: resolveRefs(jira.linkedJiraIds, linkedJiraCatalog),
+		linkedFrom: resolveRefs(jira.linkedFromIds, linkedJiraCatalog),
 	}));
 }
 

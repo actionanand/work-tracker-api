@@ -39,7 +39,28 @@ export const sprintAllocationFilters = {
 			contains: jiraId,
 		},
 	}),
-} satisfies Record<string, NotionQueryFilter | ((value: string) => NotionQueryFilter)>;
+	sprints: (sprintIds: string[]): NotionQueryFilter | undefined =>
+		orFilters(sprintIds.map((sprintId) => sprintAllocationFilters.sprint(sprintId))),
+	jiras: (jiraIds: string[]): NotionQueryFilter | undefined =>
+		orFilters(jiraIds.map((jiraId) => sprintAllocationFilters.jira(jiraId))),
+	spilled: (spilled: boolean): NotionQueryFilter => ({
+		property: "Spilled",
+		formula: { checkbox: { equals: spilled } },
+	}),
+} satisfies Record<
+	string,
+	| NotionQueryFilter
+	| ((value: string) => NotionQueryFilter)
+	| ((values: string[]) => NotionQueryFilter | undefined)
+	| ((value: boolean) => NotionQueryFilter)
+>;
+
+function orFilters(filters: NotionQueryFilter[]): NotionQueryFilter | undefined {
+	if (filters.length === 0) return undefined;
+	if (filters.length === 1) return filters[0];
+
+	return { or: filters };
+}
 
 export function combineSprintAllocationFilters(
 	filters: Array<NotionQueryFilter | undefined>,
