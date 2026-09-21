@@ -227,14 +227,14 @@ function jiraPage(
 			Appraisal: { checkbox: false },
 			Spillover: { formula: { boolean: false } },
 			"Spillover Count": { formula: { number: 0 } },
-			"Spillover Reason": richTextProperty(""),
+			Description: richTextProperty(""),
 			"In Active Sprint": { formula: { boolean: true } },
 			"Demo Required": { checkbox: false },
 			"Demoed Date": { date: null },
 			"Demo Notes": richTextProperty(""),
 			Sprints: { relation: [{ id: sprintId }] },
 			Project: { relation: [{ id: projectId }] },
-			"Blocked By": { relation: [] },
+			"Linked JIRA": { relation: [] },
 			"Release Items": { relation: [] },
 			...overrides,
 		},
@@ -249,7 +249,7 @@ const spilloverJira = jiraPage("cccccccc-cccc-cccc-cccc-cccccccccccc", "CRI-3", 
 });
 const demoPendingJira = jiraPage("dddddddd-dddd-dddd-dddd-dddddddddddd", "CRI-4", "Ready", {
 	"Demo Required": { checkbox: true },
-	"Blocked By": { relation: [{ id: blockedJiraId }] },
+	"Linked JIRA": { relation: [{ id: blockedJiraId }] },
 });
 
 const releaseJiraScopeFilter = {
@@ -637,7 +637,7 @@ describe("Dashboard API routes", () => {
 			spillovers: 1,
 			demoPending: 1,
 		});
-		expect(body.demoPendingJiras[0].blockedBy).toEqual([
+		expect(body.demoPendingJiras[0].linkedJiras).toEqual([
 			{ id: blockedJiraId, key: "CRI-2", summary: "CRI-2 summary" },
 		]);
 		expect(body.recentWorkLogs).toHaveLength(10);

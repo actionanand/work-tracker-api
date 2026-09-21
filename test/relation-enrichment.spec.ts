@@ -50,7 +50,8 @@ const teamId = "22222222-2222-2222-2222-222222222222";
 const projectId = "33333333-3333-3333-3333-333333333333";
 const sprintId = "44444444-4444-4444-4444-444444444444";
 const jiraId = "55555555-5555-5555-5555-555555555555";
-const blockedById = "66666666-6666-6666-6666-666666666666";
+const linkedJirasId = "66666666-6666-6666-6666-666666666666";
+const linkedFromId = "88888888-8888-8888-8888-888888888888";
 
 const companyRef = { id: companyId, name: "Clarivate" };
 const teamRef = { id: teamId, name: "Jupiter" };
@@ -63,7 +64,8 @@ const sprintRef = {
 	endDate: "2026-09-15",
 };
 const jiraRef = { id: jiraId, key: "CRI-1234", summary: "Build API" };
-const blockedByRef = { id: blockedById, key: "CRI-1000", summary: "Blocked task" };
+const linkedJirasRef = { id: linkedJirasId, key: "CRI-1000", summary: "Blocked task" };
+const linkedFromRef = { id: linkedFromId, key: "CRI-900", summary: "Source task" };
 
 function companyPage(id = companyId) {
 	return {
@@ -112,9 +114,22 @@ function sprintPage() {
 	};
 }
 
-function jiraPage(id = jiraId, key = "CRI-1234", summary = "Build API") {
+function jiraPage(
+	id = jiraId,
+	key = "CRI-1234",
+	summary = "Build API",
+	options: {
+		parent?: boolean;
+		linkType?: string;
+		linkReason?: string;
+		linkedJiraIds?: string[];
+	} = {},
+) {
 	return {
 		id,
+		...(options.parent
+			? { parent: { data_source_id: testEnv.JIRAS_DATA_SOURCE_ID } }
+			: {}),
 		created_time: "2026-09-01T08:00:00.000Z",
 		last_edited_time: "2026-09-01T09:00:00.000Z",
 		properties: {
@@ -122,7 +137,26 @@ function jiraPage(id = jiraId, key = "CRI-1234", summary = "Build API") {
 			Summary: { rich_text: [{ plain_text: summary }] },
 			Project: { relation: [{ id: projectId }] },
 			Sprints: { relation: [{ id: sprintId }] },
-			"Blocked By": { relation: id === jiraId ? [{ id: blockedById }] : [] },
+			"Linked JIRA": {
+				relation:
+					options.linkedJiraIds?.map((relatedId) => ({ id: relatedId })) ??
+					(id === jiraId ? [{ id: linkedJirasId }] : []),
+			},
+			"Linked From": { relation: id === jiraId ? [{ id: linkedFromId }] : [] },
+			"Link Type": (options.linkType ?? (id === jiraId ? "Blocks" : undefined))
+				? {
+						select: {
+							name: options.linkType ?? (id === jiraId ? "Blocks" : ""),
+						},
+					}
+				: undefined,
+			"Link Reason": {
+				rich_text: [
+					{ plain_text: options.linkReason ?? (id === jiraId ? "Outgoing reason" : "") },
+				],
+			},
+			"Linked On": { date: { start: "2026-09-02" } },
+			"Resolved On": { date: { start: "2026-09-03" } },
 		},
 	};
 }
@@ -225,6 +259,29 @@ function response(results: unknown[], nextCursor: string | null = null) {
 
 function stubCatalogFetch(primaryDataSourceId: string, primaryResults: unknown[]) {
 	const fetchMock = vi.fn((url: string, init: RequestInit) => {
+		if (url.endsWith(`/v1/pages/${linkedJirasId}`)) {
+			return Promise.resolve(
+				Response.json(
+					jiraPage(linkedJirasId, "CRI-1000", "Blocked task", {
+						parent: true,
+					}),
+				),
+			);
+		}
+
+		if (url.endsWith(`/v1/pages/${linkedFromId}`)) {
+			return Promise.resolve(
+				Response.json(
+					jiraPage(linkedFromId, "CRI-900", "Source task", {
+						parent: true,
+						linkType: "Dependency for",
+						linkReason: "Source-owned reason",
+						linkedJiraIds: [jiraId],
+					}),
+				),
+			);
+		}
+
 		const body = JSON.parse(String(init.body));
 		const dataSourceId = url.match(/\/data_sources\/([^/]+)\/query$/)?.[1];
 
@@ -264,7 +321,8 @@ function stubCatalogFetch(primaryDataSourceId: string, primaryResults: unknown[]
 			return Promise.resolve(
 				response([
 					jiraPage(jiraId, " CRI-1234 ", " Build API "),
-					jiraPage(blockedById, " CRI-1000 ", " Blocked task "),
+					jiraPage(linkedJirasId, " CRI-1000 ", " Blocked task "),
+					jiraPage(linkedFromId, " CRI-900 ", " Source task "),
 				]),
 			);
 		}
@@ -376,7 +434,7 @@ describe("relation enrichment", () => {
 		expect(callsFor(fetchMock, testEnv.COMPANIES_DATA_SOURCE_ID)).toHaveLength(0);
 	});
 
-	it("enriches JIRA by key with one-level project, sprint, and blockedBy refs", async () => {
+	it("enriches JIRA by key with one-level project, sprint, linkedJiras, and linkedFrom refs", async () => {
 		const fetchMock = stubCatalogFetch(testEnv.JIRAS_DATA_SOURCE_ID, [jiraPage()]);
 
 		const response = await fetchWorker("/api/jiras/CRI-1234?include=relations");
@@ -386,10 +444,32 @@ describe("relation enrichment", () => {
 			id: jiraId,
 			projectIds: [projectId],
 			sprintIds: [sprintId],
-			blockedByIds: [blockedById],
+			linkedJiraIds: [linkedJirasId],
+			linkedFromIds: [linkedFromId],
 			projects: [projectRef],
 			sprints: [sprintRef],
-			blockedBy: [blockedByRef],
+			linkedJiras: [linkedJirasRef],
+			linkedFrom: [linkedFromRef],
+			relationships: [
+				{
+					direction: "outgoing",
+					storedType: "Blocks",
+					displayType: "Blocks",
+					otherJira: { id: linkedJirasId, key: "CRI-1000" },
+					reason: "Outgoing reason",
+					linkedOn: "2026-09-02",
+					resolvedOn: "2026-09-03",
+				},
+				{
+					direction: "incoming",
+					storedType: "Dependency for",
+					displayType: "Depends on",
+					otherJira: { id: linkedFromId, key: "CRI-900" },
+					reason: "Source-owned reason",
+					linkedOn: "2026-09-02",
+					resolvedOn: "2026-09-03",
+				},
+			],
 		});
 		expect(callsFor(fetchMock, testEnv.JIRAS_DATA_SOURCE_ID)).toHaveLength(2);
 	});
@@ -409,7 +489,7 @@ describe("relation enrichment", () => {
 								[jiraPage(jiraId), jiraPage(secondJiraId, "CRI-5678", "Second")],
 								"cursor-next",
 							)
-						: response([jiraPage(blockedById, "CRI-1000", "Blocked task")]),
+						: response([jiraPage(linkedJirasId, "CRI-1000", "Blocked task")]),
 				);
 			}
 
@@ -446,13 +526,13 @@ describe("relation enrichment", () => {
 					id: jiraId,
 					projects: [projectRef],
 					sprints: [sprintRef],
-					blockedBy: [blockedByRef],
+					linkedJiras: [linkedJirasRef],
 				},
 				{
 					id: secondJiraId,
 					projects: [projectRef],
 					sprints: [sprintRef],
-					blockedBy: [],
+					linkedJiras: [],
 				},
 			],
 		});

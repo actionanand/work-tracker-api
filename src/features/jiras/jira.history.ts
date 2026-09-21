@@ -2,12 +2,15 @@ import type { SprintAllocation } from "../sprint-allocations/sprint-allocation.m
 import type { EnrichedJira } from "../../shared/relations/relation-enrichment";
 import type { SprintRef } from "../../shared/relations/relation-types";
 import { sortSprintRefs } from "../../shared/relations/relation-enrichment";
+import type { JiraRelationship } from "./jira.relationships";
 
 export interface SprintHistoryItem {
 	sprint: SprintRef;
 	allocationId: string | null;
 	plannedDays: number | null;
 	allocationNotes: string;
+	spillReason: string;
+	spilled: boolean;
 	allocationConflict: boolean;
 	allocationCount: number;
 }
@@ -64,6 +67,8 @@ export function buildSprintHistory(
 			allocationId: allocation?.id ?? null,
 			plannedDays: allocation?.plannedDays ?? null,
 			allocationNotes: allocation?.notes ?? "",
+			spillReason: allocation?.spillReason ?? "",
+			spilled: allocation?.spilled ?? false,
 			allocationConflict,
 			allocationCount: matchingAllocations.length,
 		};
@@ -72,20 +77,21 @@ export function buildSprintHistory(
 
 export function deriveSpillEvents(
 	sprintHistory: SprintHistoryItem[],
-	spilloverCount: number,
-	spilloverReason: string,
 ): SpillEvent[] {
-	const reason = spilloverReason.trim();
 	const events: SpillEvent[] = [];
 
 	for (let index = 0; index < sprintHistory.length - 1; index += 1) {
-		const number = index + 1;
+		const receivingAllocation = sprintHistory[index + 1];
+		const reason =
+			receivingAllocation.allocationConflict || !receivingAllocation.allocationId
+				? null
+				: receivingAllocation.spillReason.trim() || null;
 
 		events.push({
-			number,
+			number: index + 1,
 			fromSprint: toSpillSprintRef(sprintHistory[index].sprint),
-			toSprint: toSpillSprintRef(sprintHistory[index + 1].sprint),
-			reason: number === spilloverCount && reason.length > 0 ? reason : null,
+			toSprint: toSpillSprintRef(receivingAllocation.sprint),
+			reason,
 		});
 	}
 
@@ -93,7 +99,9 @@ export function deriveSpillEvents(
 }
 
 export interface JiraDetail extends EnrichedJira {
+	relationships: JiraRelationship[];
 	sprintHistory: SprintHistoryItem[];
 	spillEvents: SpillEvent[];
 	latestSpill: SpillEvent | null;
+	spillHistoryConsistent: boolean;
 }

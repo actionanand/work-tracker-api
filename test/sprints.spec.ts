@@ -260,7 +260,7 @@ const secondJiraPage = {
 		"Spillover Count": {
 			formula: { number: 0 },
 		},
-		"Spillover Reason": {
+		Description: {
 			rich_text: [],
 		},
 		"In Active Sprint": {
@@ -281,7 +281,7 @@ const secondJiraPage = {
 		Project: {
 			relation: [],
 		},
-		"Blocked By": {
+		"Linked JIRA": {
 			relation: [],
 		},
 		"Release Items": {

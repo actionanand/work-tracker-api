@@ -2,7 +2,7 @@
 
 **Version:** 2026-09-02  
 **Target:** PostgreSQL-style relational design  
-**Purpose:** SQL equivalent of the Notion Work Tracker, including normalized relations, joins, derived views, capacity calculation, Jira dependencies, tags, appraisal data, feedback/growth tracking, demo tracking, release-item tracking, and sprint allocation.
+**Purpose:** SQL equivalent of the Notion Work Tracker, including normalized relations, joins, derived views, capacity calculation, JIRA relationships, tags, appraisal data, feedback/growth tracking, demo tracking, release-item tracking, and sprint allocation.
 
 ---
 
@@ -39,8 +39,8 @@ erDiagram
     JIRA_TICKETS ||--o{ JIRA_SPRINTS : belongs_to
     SPRINTS ||--o{ JIRA_SPRINTS : contains
 
-    JIRA_TICKETS ||--o{ JIRA_DEPENDENCIES : blocked_ticket
-    JIRA_TICKETS ||--o{ JIRA_DEPENDENCIES : blocking_ticket
+    JIRA_TICKETS ||--o{ JIRA_RELATIONSHIPS : source
+    JIRA_TICKETS ||--o{ JIRA_RELATIONSHIPS : target
 
     JIRA_TICKETS ||--o{ JIRA_TICKET_TAGS : tagged
     TAGS ||--o{ JIRA_TICKET_TAGS : classifies
@@ -70,7 +70,7 @@ erDiagram
 | `sprints` | Sprint master and capacity inputs |
 | `jira_tickets` | Jira ticket metadata |
 | `jira_sprints` | Many-to-many Jira ↔ Sprint history |
-| `jira_dependencies` | Self-referencing blocked-by relationships |
+| `jira_relationships` | Self-referencing source-to-target JIRA relationships |
 | `tags` | Jira tag catalog |
 | `jira_ticket_tags` | Many-to-many Jira ↔ Tag |
 | `work_logs` | Daily work entries |
@@ -194,9 +194,9 @@ CREATE TABLE jira_tickets (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     jira_key            text NOT NULL UNIQUE,
     summary             text,
+    description         text NOT NULL DEFAULT '',
     project_id          uuid REFERENCES projects(id),
     status              text NOT NULL DEFAULT 'Not started',
-    spillover_reason    text,
     appraisal           boolean NOT NULL DEFAULT false,
     demo_required       boolean NOT NULL DEFAULT false,
     demoed_date         date,
@@ -220,16 +220,20 @@ CREATE TABLE jira_sprints (
 );
 ```
 
-## 4.7 Jira dependencies
+## 4.7 Jira relationships
 
 ```sql
-CREATE TABLE jira_dependencies (
-    jira_id             uuid NOT NULL REFERENCES jira_tickets(id) ON DELETE CASCADE,
-    blocked_by_jira_id  uuid NOT NULL REFERENCES jira_tickets(id) ON DELETE CASCADE,
-    created_at          timestamptz NOT NULL DEFAULT now(),
+CREATE TABLE jira_relationships (
+    source_jira_id  uuid NOT NULL REFERENCES jira_tickets(id) ON DELETE CASCADE,
+    target_jira_id  uuid NOT NULL REFERENCES jira_tickets(id) ON DELETE CASCADE,
+    link_type       text NOT NULL CHECK (link_type IN ('Blocks', 'Dependency for', 'Related to')),
+    link_reason     text NOT NULL DEFAULT '',
+    linked_on       date,
+    resolved_on     date,
+    created_at      timestamptz NOT NULL DEFAULT now(),
 
-    PRIMARY KEY (jira_id, blocked_by_jira_id),
-    CHECK (jira_id <> blocked_by_jira_id)
+    PRIMARY KEY (source_jira_id, target_jira_id),
+    CHECK (source_jira_id <> target_jira_id)
 );
 ```
 
@@ -332,6 +336,7 @@ CREATE TABLE sprint_allocations (
     jira_id         uuid NOT NULL REFERENCES jira_tickets(id) ON DELETE CASCADE,
     planned_days    numeric(6,2) NOT NULL,
     notes           text,
+    spill_reason    text NOT NULL DEFAULT '',
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
 
@@ -500,7 +505,7 @@ SELECT
     j.summary,
     j.project_id,
     j.status,
-    j.spillover_reason,
+    j.description,
     j.appraisal,
     j.demo_required,
     j.demoed_date,
@@ -522,7 +527,7 @@ GROUP BY
     j.summary,
     j.project_id,
     j.status,
-    j.spillover_reason,
+    j.description,
     j.appraisal,
     j.demo_required,
     j.demoed_date,
@@ -954,19 +959,20 @@ JOIN tags t ON t.id = jtt.tag_id
 WHERE t.name = 'Dependency';
 ```
 
-## Blocked Jira with dependency details
+## JIRA relationship details
 
 ```sql
 SELECT
-    blocked.jira_key AS blocked_jira,
-    blocked.summary AS blocked_summary,
-    dependency.jira_key AS blocked_by_jira,
-    dependency.summary AS dependency_summary,
-    dependency.status AS dependency_status
-FROM jira_dependencies jd
-JOIN jira_tickets blocked ON blocked.id = jd.jira_id
-JOIN jira_tickets dependency ON dependency.id = jd.blocked_by_jira_id
-ORDER BY blocked.jira_key;
+    source.jira_key AS source_jira,
+    target.jira_key AS target_jira,
+    jr.link_type,
+    jr.link_reason,
+    jr.linked_on,
+    jr.resolved_on
+FROM jira_relationships jr
+JOIN jira_tickets source ON source.id = jr.source_jira_id
+JOIN jira_tickets target ON target.id = jr.target_jira_id
+ORDER BY source.jira_key;
 ```
 
 ## Work Log entries for one Jira
@@ -1240,8 +1246,9 @@ One Jira may have multiple Release Items. Do not reuse Sprint Allocation's uniqu
 | Relation Company → Projects | `projects.company_id` FK |
 | Relation Team → Projects | `projects.team_id` FK |
 | Jira `Sprints` relation | `jira_sprints` join table |
+| Jira `Description` | `jira_tickets.description` |
 | Work Log `JIRAs` relation | `work_log_jiras` join table |
-| Jira `Blocked By` | `jira_dependencies` self-join table |
+| Jira `Linked JIRA` / `Linked From` | `jira_relationships` source-target self-join table; `Linked From` is the reciprocal view |
 | Jira `Tags` multi-select | `tags` + `jira_ticket_tags` |
 | Jira `Demo Required` | `jira_tickets.demo_required` |
 | Jira `Demoed Date` | `jira_tickets.demoed_date` |
@@ -1250,6 +1257,7 @@ One Jira may have multiple Release Items. Do not reuse Sprint Allocation's uniqu
 | Jira `Add Release Item` button | Application action: `INSERT INTO release_items(jira_id)` |
 | Sprint `Allocations` reverse relation | `sprint_allocations.sprint_id` |
 | Sprint Allocation `JIRA` relation | `sprint_allocations.jira_id` |
+| Sprint Allocation `Spill Reason` | `sprint_allocations.spill_reason` |
 | Rollup `Company` in Work Log | JOIN Work Log → Project → Company |
 | Rollup `Team` in Work Log | JOIN Work Log → Project → Team |
 | Rollup Jira Status | JOIN via `work_log_jiras` |
@@ -1385,7 +1393,7 @@ companies
    │      │      └── sprint_allocations
    │      ├── jira_tickets
    │      │      ├── jira_sprints ────── sprints
-   │      │      ├── jira_dependencies ─ jira_tickets
+   │      │      ├── jira_relationships ─ jira_tickets
    │      │      ├── jira_ticket_tags ── tags
    │      │      └── release_items
    │      ├── work_logs

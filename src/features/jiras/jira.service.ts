@@ -52,6 +52,7 @@ import { jiraFilters } from "./jira.filters";
 import { mapJira, type Jira, type NotionJiraPage } from "./jira.mapper";
 import { mapJiraOption, type JiraOption } from "./jira-option.mapper";
 import { normalizeJiraKey } from "./jira.validation";
+import { buildJiraRelationships, type JiraRelationship } from "./jira.relationships";
 
 export interface JiraListResponse<TJira = Jira> {
 	data: TJira[];
@@ -333,23 +334,21 @@ export async function listJiraOptions(
 }
 
 async function enrichJiraDetail(env: Env, jira: Jira): Promise<JiraDetail> {
-	const [enriched, allocations] = await Promise.all([
+	const [enriched, allocations, relationships] = await Promise.all([
 		enrichJira(env, jira),
 		listAllSprintAllocations(env, sprintAllocationFilters.jira(jira.id)),
+		buildJiraRelationships(env, jira),
 	]);
 	const sprintHistory = buildSprintHistory(enriched.sprints, allocations);
-	const spillEvents = deriveSpillEvents(
-		sprintHistory,
-		jira.spilloverCount,
-		jira.spilloverReason,
-	);
+	const spillEvents = deriveSpillEvents(sprintHistory);
 
 	return {
 		...enriched,
+		relationships,
 		sprintHistory,
 		spillEvents,
-		latestSpill:
-			spillEvents.find((event) => event.number === jira.spilloverCount) ?? null,
+		latestSpill: spillEvents[spillEvents.length - 1] ?? null,
+		spillHistoryConsistent: spillEvents.length === jira.spilloverCount,
 	};
 }
 

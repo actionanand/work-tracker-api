@@ -174,25 +174,38 @@ tags
 appraisal
 spillover
 spilloverCount
-spilloverReason
+description
+firstSprintStart
 inActiveSprint
 demoRequired
 demoedDate
 demoNotes
 sprintIds
 projectIds
-blockedByIds
+linkedJiraIds
+linkedFromIds
+linkType
+linkReason
+linkedOn
+resolvedOn
 releaseItemIds
 ```
+
+`firstSprintStart` is mapped from the JIRAs `First Sprint Start` formula date.
 
 Relation IDs currently remain raw Notion page IDs:
 
 - `sprintIds`
 - `projectIds`
-- `blockedByIds`
+- `linkedJiraIds`
+- `linkedFromIds`
 - `releaseItemIds`
 
-When `include=relations` is supplied, JIRA endpoints also include shallow `projects`, `sprints`, and `blockedBy` arrays. Raw relation ID arrays remain unchanged. `blockedBy` JIRAs are not recursively enriched.
+When `include=relations` is supplied, JIRA endpoints also include shallow `projects`, `sprints`, `linkedJiras`, and `linkedFrom` arrays. Raw relation ID arrays remain unchanged. Linked JIRAs are not recursively enriched.
+
+`Description` replaces the retired JIRA-level spill reason. `Linked JIRA` stores source-to-target relationships and `Linked From` is Notion's reciprocal back-reference; it is not separately authored. Valid `Link Type` values are `Blocks`, `Dependency for`, and `Related to`. `Link Reason`, `Linked On`, and `Resolved On` belong to the source JIRA row. Resolved links remain visible.
+
+JIRA QUERY supports `linkedJiraIds`, `linkedFromIds`, `linkTypes`, and `resolved`. Values within an ID/type family use Notion `or`; different families use `and`. `resolved: false` filters for an empty `Resolved On` date, while `resolved: true` filters for a populated date.
 
 For `GET /api/jiras/:jiraKey?include=relations`, the detail response also includes Sprint planning history:
 
@@ -210,6 +223,8 @@ For `GET /api/jiras/:jiraKey?include=relations`, the detail response also includ
       "allocationId": "allocation-page-id",
       "plannedDays": 5,
       "allocationNotes": "Initial allocation",
+	  "spillReason": "",
+	  "spilled": false,
       "allocationConflict": false,
       "allocationCount": 1
     }
@@ -244,7 +259,9 @@ Sprint references are sorted chronologically by Sprint Start Date, then End Date
 
 If more than one Sprint Allocation exists for the same JIRA and Sprint, the API does not choose one row as authoritative. The history item returns `plannedDays: null`, `allocationId: null`, `allocationNotes: ""`, `allocationConflict: true`, and the duplicate row count in `allocationCount`.
 
-`spillEvents` are derived from chronological Sprint transitions. `latestSpill` is the event whose number matches `spilloverCount`; if that event cannot be derived, it is `null`. Because the current Notion schema stores only one top-level `spilloverReason`, the reason is attached only to the matching latest spill event when available.
+`spillEvents` are derived from chronological Sprint transitions. Event #N uses the receiving Sprint Allocation's `Spill Reason`; an empty, missing, or conflicting allocation produces a `null` reason. `latestSpill` is the latest chronological event. `spilloverCount` remains a Notion consistency reference and the detail response exposes `spillHistoryConsistent` when its value differs from the derived history.
+
+The JIRA detail response also contains `relationships`. Each relationship has `direction`, `storedType`, `displayType`, `otherJira`, `reason`, `linkedOn`, and `resolvedOn`. Outgoing `Blocks` and `Dependency for` keep those labels. Incoming source relationships are presented as `Blocked by` and `Depends on`; `Related to` is symmetric.
 
 ## Historical JIRA Goal
 

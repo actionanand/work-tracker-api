@@ -56,14 +56,20 @@ const mappedJira = {
 	appraisal: true,
 	spillover: true,
 	spilloverCount: 2,
-	spilloverReason: "Dependency",
+	description: "JIRA description",
+	firstSprintStart: "2026-08-19",
 	inActiveSprint: false,
 	demoRequired: true,
 	demoedDate: "2026-09-02",
 	demoNotes: "Shown in sprint review",
 	sprintIds: ["sprint-id"],
 	projectIds: ["project-id"],
-	blockedByIds: ["blocked-by-id"],
+	linkedJiraIds: ["linked-jira-id"],
+	linkedFromIds: ["linked-from-id"],
+	linkType: "Blocks",
+	linkReason: "Dependency",
+	linkedOn: "2026-08-20",
+	resolvedOn: null,
 	releaseItemIds: ["release-item-id"],
 };
 
@@ -93,8 +99,19 @@ const notionJiraPage = {
 		"Spillover Count": {
 			formula: { number: 2 },
 		},
-		"Spillover Reason": {
-			rich_text: [{ plain_text: "Dependency" }],
+		Description: {
+			rich_text: [{ plain_text: "JIRA description" }],
+		},
+		"First Sprint Start": {
+			type: "formula",
+			formula: {
+				type: "date",
+				date: {
+					start: "2026-08-19",
+					end: null,
+					time_zone: null,
+				},
+			},
 		},
 		"In Active Sprint": {
 			formula: { boolean: false },
@@ -114,8 +131,23 @@ const notionJiraPage = {
 		Project: {
 			relation: [{ id: "project-id" }],
 		},
-		"Blocked By": {
-			relation: [{ id: "blocked-by-id" }],
+		"Linked JIRA": {
+			relation: [{ id: "linked-jira-id" }],
+		},
+		"Linked From": {
+			relation: [{ id: "linked-from-id" }],
+		},
+		"Link Type": {
+			select: { name: "Blocks" },
+		},
+		"Link Reason": {
+			rich_text: [{ plain_text: "Dependency" }],
+		},
+		"Linked On": {
+			date: { start: "2026-08-20" },
+		},
+		"Resolved On": {
+			date: null,
 		},
 		"Release Items": {
 			relation: [{ id: "release-item-id" }],
@@ -365,6 +397,8 @@ function notionAllocationPage(
 	jiraId: string,
 	plannedDays: number,
 	notes = "",
+	spillReason = "",
+	spilled = false,
 ) {
 	return {
 		id,
@@ -374,6 +408,8 @@ function notionAllocationPage(
 			JIRA: { relation: [{ id: jiraId }] },
 			"Planned Days": { number: plannedDays },
 			Notes: { rich_text: [{ plain_text: notes }] },
+			"Spill Reason": { rich_text: [{ plain_text: spillReason }] },
+			Spilled: { formula: { boolean: spilled } },
 			"Sprint Active": {
 				rollup: {
 					array: [{ formula: { boolean: false } }],
@@ -413,7 +449,7 @@ function stubJiraDetailFetch(options: {
 				Status: { status: { name: "Cancelled" } },
 				Spillover: { formula: { boolean: true } },
 				"Spillover Count": { formula: { number: 2 } },
-				"Spillover Reason": {
+				Description: {
 					rich_text: [{ plain_text: "Second spill reason" }],
 				},
 				Sprints: {
@@ -442,10 +478,53 @@ function stubJiraDetailFetch(options: {
 				sprint6Id,
 				"99999999-9999-9999-9999-999999999999",
 				0,
+				"",
+				"Reason A",
+				true,
 			),
 		];
 	const allocationNextPage = options.allocationNextPage ?? [];
 	const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+		if (url.endsWith("/v1/pages/linked-jira-id")) {
+			return Promise.resolve(
+				Response.json({
+					...notionJiraPage,
+					id: "linked-jira-id",
+					parent: { data_source_id: testEnv.JIRAS_DATA_SOURCE_ID },
+					properties: {
+						...notionJiraPage.properties,
+						"JIRA Key": { title: [{ plain_text: "LINK-1" }] },
+						Summary: { rich_text: [{ plain_text: "Linked target" }] },
+						"Linked JIRA": { relation: [] },
+						"Linked From": { relation: [] },
+					},
+				}),
+			);
+		}
+
+		if (url.endsWith("/v1/pages/linked-from-id")) {
+			return Promise.resolve(
+				Response.json({
+					...notionJiraPage,
+					id: "linked-from-id",
+					parent: { data_source_id: testEnv.JIRAS_DATA_SOURCE_ID },
+					properties: {
+						...notionJiraPage.properties,
+						"JIRA Key": { title: [{ plain_text: "LINK-2" }] },
+						Summary: { rich_text: [{ plain_text: "Linked source" }] },
+						"Linked JIRA": {
+							relation: [{ id: (jiraDetailPage as { id: string }).id }],
+						},
+						"Linked From": { relation: [] },
+						"Link Type": { select: { name: "Dependency for" } },
+						"Link Reason": { rich_text: [{ plain_text: "Source-owned reason" }] },
+						"Linked On": { date: { start: "2026-09-02" } },
+						"Resolved On": { date: { start: "2026-09-03" } },
+					},
+				}),
+			);
+		}
+
 		const body = init?.body ? JSON.parse(String(init.body)) : {};
 
 		if (url.includes(testEnv.JIRAS_DATA_SOURCE_ID)) {
@@ -862,7 +941,7 @@ describe("Work Tracker API worker", () => {
 
 		expect(response.status).toBe(200);
 		expect(body.status).toBe("Cancelled");
-		expect(body.spilloverReason).toBe("Second spill reason");
+		expect(body.description).toBe("Second spill reason");
 		expect(body.sprints.map((sprint: { id: string }) => sprint.id)).toEqual([
 			sprint5Id,
 			sprint6Id,
@@ -882,6 +961,8 @@ describe("Work Tracker API worker", () => {
 				allocationId: "allocation-sprint-5",
 				plannedDays: 10,
 				allocationNotes: "Initial plan",
+				spillReason: "",
+				spilled: false,
 				allocationConflict: false,
 				allocationCount: 1,
 			},
@@ -890,6 +971,8 @@ describe("Work Tracker API worker", () => {
 				allocationId: "allocation-sprint-6",
 				plannedDays: 0,
 				allocationNotes: "",
+				spillReason: "Reason A",
+				spilled: true,
 				allocationConflict: false,
 				allocationCount: 1,
 			},
@@ -907,20 +990,20 @@ describe("Work Tracker API worker", () => {
 				number: 1,
 				fromSprint: { id: sprint5Id },
 				toSprint: { id: sprint6Id },
-				reason: null,
+				reason: "Reason A",
 			},
 			{
 				number: 2,
 				fromSprint: { id: sprint6Id },
 				toSprint: { id: sprint7Id },
-				reason: "Second spill reason",
+				reason: null,
 			},
 		]);
 		expect(body.latestSpill).toMatchObject({
 			number: 2,
 			fromSprint: { id: sprint6Id },
 			toSprint: { id: sprint7Id },
-			reason: "Second spill reason",
+			reason: null,
 		});
 		expect(postedBodies(fetchMock, testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)).toEqual([
 			{
@@ -935,7 +1018,7 @@ describe("Work Tracker API worker", () => {
 		]);
 	});
 
-	it("does not invent a latest spill when spillover count exceeds available transitions", async () => {
+	it("keeps the latest derived spill when spillover count exceeds available transitions", async () => {
 		const fetchMock = stubJiraDetailFetch({
 			jiraPage: {
 				...notionJiraPage,
@@ -945,7 +1028,7 @@ describe("Work Tracker API worker", () => {
 					"JIRA Key": { title: [{ plain_text: "LSC-84944" }] },
 					Spillover: { formula: { boolean: true } },
 					"Spillover Count": { formula: { number: 3 } },
-					"Spillover Reason": { rich_text: [{ plain_text: "No transition" }] },
+					Description: { rich_text: [{ plain_text: "No transition" }] },
 					Sprints: { relation: [{ id: sprint5Id }, { id: sprint6Id }] },
 				},
 			},
@@ -956,8 +1039,9 @@ describe("Work Tracker API worker", () => {
 
 		expect(response.status).toBe(200);
 		expect(body.spillEvents).toHaveLength(1);
-		expect(body.spillEvents[0].reason).toBeNull();
-		expect(body.latestSpill).toBeNull();
+		expect(body.spillEvents[0].reason).toBe("Reason A");
+		expect(body.latestSpill).toMatchObject({ number: 1 });
+		expect(body.spillHistoryConsistent).toBe(false);
 		expect(postedBodies(fetchMock, testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)).toHaveLength(
 			1,
 		);

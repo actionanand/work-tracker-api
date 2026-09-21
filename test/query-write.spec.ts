@@ -184,14 +184,14 @@ function jiraPage() {
 			Appraisal: { checkbox: false },
 			Spillover: { formula: { boolean: false } },
 			"Spillover Count": { formula: { number: 0 } },
-			"Spillover Reason": { rich_text: [] },
+			Description: { rich_text: [] },
 			"In Active Sprint": { formula: { boolean: true } },
 			"Demo Required": { checkbox: false },
 			"Demoed Date": { date: null },
 			"Demo Notes": { rich_text: [] },
 			Sprints: { relation: [] },
 			Project: { relation: [] },
-			"Blocked By": { relation: [] },
+			"Linked JIRA": { relation: [] },
 			"Release Items": { relation: [] },
 		},
 	};
@@ -699,6 +699,48 @@ describe("QUERY, write, and metadata API support", () => {
 		});
 		expect(await response.json()).toMatchObject({
 			data: [{ status: "Cancelled" }],
+		});
+	});
+
+	it("translates JIRA relationship QUERY filters into Notion filters", async () => {
+		const linkedJiraId = "66666666-6666-6666-6666-666666666666";
+		const linkedFromId = "77777777-7777-7777-7777-777777777777";
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({ results: [jiraPage()], has_more: false, next_cursor: null }),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/jiras",
+			jsonRequest("QUERY", {
+				filters: {
+					linkedJiraIds: [linkedJiraId],
+					linkedFromIds: [linkedFromId],
+					linkTypes: ["Blocks", "Dependency for"],
+					resolved: false,
+				},
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		expect(queryBody(fetchMock, testEnv.JIRAS_DATA_SOURCE_ID)).toEqual({
+			page_size: 25,
+			filter: {
+				and: [
+					{ property: "Linked JIRA", relation: { contains: linkedJiraId } },
+					{ property: "Linked From", relation: { contains: linkedFromId } },
+					{
+						or: [
+							{ property: "Link Type", select: { equals: "Blocks" } },
+							{
+								property: "Link Type",
+								select: { equals: "Dependency for" },
+							},
+						],
+					},
+					{ property: "Resolved On", date: { is_empty: true } },
+				],
+			},
 		});
 	});
 

@@ -99,6 +99,28 @@ export const jiraFilters = {
 		orFilters(tags.map((tag) => jiraFilters.tag(tag))),
 	sprints: (sprintIds: string[]): NotionQueryFilter | undefined =>
 		orFilters(sprintIds.map((sprintId) => jiraFilters.sprint(sprintId))),
+	linkedJira: (jiraId: string): NotionQueryFilter => ({
+		property: "Linked JIRA",
+		relation: { contains: jiraId },
+	}),
+	linkedJiras: (jiraIds: string[]): NotionQueryFilter | undefined =>
+		orFilters(jiraIds.map((jiraId) => jiraFilters.linkedJira(jiraId))),
+	linkedFrom: (jiraId: string): NotionQueryFilter => ({
+		property: "Linked From",
+		relation: { contains: jiraId },
+	}),
+	linkedFromMany: (jiraIds: string[]): NotionQueryFilter | undefined =>
+		orFilters(jiraIds.map((jiraId) => jiraFilters.linkedFrom(jiraId))),
+	linkType: (linkType: string): NotionQueryFilter => ({
+		property: "Link Type",
+		select: { equals: linkType },
+	}),
+	linkTypes: (linkTypes: string[]): NotionQueryFilter | undefined =>
+		orFilters(linkTypes.map((linkType) => jiraFilters.linkType(linkType))),
+	resolved: (resolved: boolean): NotionQueryFilter => ({
+		property: "Resolved On",
+		date: resolved ? { is_not_empty: true } : { is_empty: true },
+	}),
 	inActiveSprintValue: (inActiveSprint: boolean): NotionQueryFilter => ({
 		property: "In Active Sprint",
 		formula: {

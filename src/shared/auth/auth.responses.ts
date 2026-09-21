@@ -113,6 +113,7 @@ export function corsPreflightResponse(pathname = ""): Response {
 		"/api/work-links",
 		"/api/jiras",
 		"/api/jiras/options",
+		"/api/sprint-allocations",
 		"/api/todos",
 		"/api/tasks",
 		"/api/memos",
@@ -134,6 +135,10 @@ export function corsPreflightResponse(pathname = ""): Response {
 function allowHeaderForPath(pathname: string): string | null {
 	if (pathname === "/api/jiras") {
 		return "GET, QUERY, POST, OPTIONS";
+	}
+
+	if (pathname === "/api/sprint-allocations") {
+		return "GET, QUERY, OPTIONS";
 	}
 
 	if (pathname === "/api/jiras/meta") {

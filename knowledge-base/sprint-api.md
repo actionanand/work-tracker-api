@@ -138,6 +138,7 @@ If more than one Sprint Allocation exists for the same Sprint and JIRA, the API 
 | --- | --- | --- |
 | `GET` | `/api/sprint-allocations` | Query all sprint allocations from the configured Notion Sprint Allocations data source. |
 | `GET` | `/api/sprint-allocations/current` | Query allocations whose related Sprint is active. |
+| `QUERY` | `/api/sprint-allocations` | Query allocations with JSON filters and cursor pagination. |
 
 Unknown paths such as `/api/sprint-allocations/random` are not handled by `handleSprintAllocationRoutes()` and fall through to the main Worker 404.
 
@@ -155,6 +156,8 @@ If both are provided, they are composed with a Notion `and` filter.
 `sprintId` and `jiraId` must be valid Notion page IDs.
 
 Sprint Allocation collection endpoints support the same shared `pageSize` and `cursor` pagination contract.
+
+`QUERY /api/sprint-allocations` accepts `sprintIds`, `jiraIds`, and `spilled`. ID values within a family use Notion `or`; filter families use `and`. `spilled` is sent to Notion as a `Spilled` formula checkbox filter. The collection advertises `Accept-Query: application/json`.
 
 ## Sprint Allocation Filters
 
@@ -189,7 +192,13 @@ notes
 sprintIds
 jiraIds
 sprintActive
+spillReason
+spilled
+sprintStart
+firstSprintStart
 ```
+
+`Spill Reason` belongs to the receiving allocation, not the JIRA. Chronological allocations therefore derive spill history: the second allocation supplies the reason for Spill #1, the third for Spill #2, and so on. `Spilled` and `First Sprint Start` are Notion formulas; `Sprint Start` is a Notion date rollup.
 
 Relation values are returned as raw Notion page IDs. Relation-name resolution is intentionally not implemented yet.
 

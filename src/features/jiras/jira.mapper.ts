@@ -12,6 +12,9 @@ interface NotionJiraProperty {
 	status?: {
 		name: string;
 	};
+	select?: {
+		name: string;
+	};
 	multi_select?: Array<{
 		name: string;
 	}>;
@@ -19,10 +22,23 @@ interface NotionJiraProperty {
 	formula?: {
 		boolean?: boolean;
 		number?: number;
+		date?: {
+			start?: string | null;
+		} | null;
 	};
 	date?: {
 		start?: string | null;
 	};
+	rollup?: {
+		date?: {
+			start?: string | null;
+		} | null;
+		array?: Array<{
+			date?: {
+				start?: string | null;
+			} | null;
+		}>;
+	} | null;
 	relation?: NotionRelationItem[];
 }
 
@@ -44,14 +60,20 @@ export interface Jira {
 	appraisal: boolean;
 	spillover: boolean;
 	spilloverCount: number;
-	spilloverReason: string;
+	description: string;
+	firstSprintStart: string | null;
 	inActiveSprint: boolean;
 	demoRequired: boolean;
 	demoedDate: string | null;
 	demoNotes: string;
 	sprintIds: string[];
 	projectIds: string[];
-	blockedByIds: string[];
+	linkedJiraIds: string[];
+	linkedFromIds: string[];
+	linkType: string | null;
+	linkReason: string;
+	linkedOn: string | null;
+	resolvedOn: string | null;
 	releaseItemIds: string[];
 }
 
@@ -61,6 +83,18 @@ export function plainText(items: NotionTextItem[] = []): string {
 
 export function relationIds(property: NotionJiraProperty | undefined): string[] {
 	return (property?.relation ?? []).map((item) => item.id);
+}
+
+function notionDate(property: NotionJiraProperty | undefined): string | null {
+	if (property?.date?.start) return property.date.start;
+	if (property?.formula?.date?.start) return property.formula.date.start;
+	if (property?.rollup?.date?.start) return property.rollup.date.start;
+
+	for (const item of property?.rollup?.array ?? []) {
+		if (item.date?.start) return item.date.start;
+	}
+
+	return null;
 }
 
 export function mapJira(page: NotionJiraPage): Jira {
@@ -84,7 +118,9 @@ export function mapJira(page: NotionJiraPage): Jira {
 
 		spilloverCount: p["Spillover Count"]?.formula?.number ?? 0,
 
-		spilloverReason: plainText(p["Spillover Reason"]?.rich_text),
+		description: plainText(p.Description?.rich_text),
+
+		firstSprintStart: notionDate(p["First Sprint Start"]),
 
 		inActiveSprint: p["In Active Sprint"]?.formula?.boolean ?? false,
 
@@ -98,7 +134,17 @@ export function mapJira(page: NotionJiraPage): Jira {
 
 		projectIds: relationIds(p["Project"]),
 
-		blockedByIds: relationIds(p["Blocked By"]),
+		linkedJiraIds: relationIds(p["Linked JIRA"]),
+
+		linkedFromIds: relationIds(p["Linked From"]),
+
+		linkType: p["Link Type"]?.select?.name ?? null,
+
+		linkReason: plainText(p["Link Reason"]?.rich_text),
+
+		linkedOn: p["Linked On"]?.date?.start ?? null,
+
+		resolvedOn: p["Resolved On"]?.date?.start ?? null,
 
 		releaseItemIds: relationIds(p["Release Items"]),
 	};

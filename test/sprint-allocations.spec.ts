@@ -178,6 +178,20 @@ const fullAllocationPage = {
 				],
 			},
 		},
+		"Spill Reason": { rich_text: [{ plain_text: "DevOps issue" }] },
+		Spilled: { formula: { boolean: true } },
+		"Sprint Start": { rollup: { date: { start: "2026-09-01" } } },
+		"First Sprint Start": {
+			type: "formula",
+			formula: {
+				type: "date",
+				date: {
+					start: "2026-08-19",
+					end: null,
+					time_zone: null,
+				},
+			},
+		},
 	},
 };
 
@@ -305,6 +319,10 @@ const expectedAllocation = {
 	sprintIds: ["44444444-4444-4444-4444-444444444444"],
 	jiraIds: ["55555555-5555-5555-5555-555555555555"],
 	sprintActive: true,
+	spillReason: "DevOps issue",
+	spilled: true,
+	sprintStart: "2026-09-01",
+	firstSprintStart: "2026-08-19",
 };
 
 const expectedZeroPlannedDaysAllocation = {
@@ -315,6 +333,10 @@ const expectedZeroPlannedDaysAllocation = {
 	sprintIds: ["44444444-4444-4444-4444-444444444444"],
 	jiraIds: ["55555555-5555-5555-5555-555555555555"],
 	sprintActive: true,
+	spillReason: "",
+	spilled: false,
+	sprintStart: null,
+	firstSprintStart: null,
 };
 
 function stubNotionFetch() {
@@ -338,9 +360,17 @@ function stubNotionFetch() {
 	return fetchMock;
 }
 
-async function fetchWorker(path: string): Promise<Response> {
+async function fetchWorker(path: string, init: RequestInit = {}): Promise<Response> {
+	const headers = new Headers(await createAuthHeaders(testEnv));
+
+	for (const [name, value] of new Headers(init.headers)) {
+		headers.set(name, value);
+	}
+
 	const request = new IncomingRequest(`http://example.com${path}`, {
-		headers: await createAuthHeaders(testEnv),
+		method: init.method,
+		body: init.body,
+		headers,
 	});
 	const ctx = createExecutionContext();
 
@@ -501,6 +531,53 @@ describe("Sprint Allocation API routes", () => {
 			hasMore: true,
 			nextCursor: "next-valid-allocation-page",
 		});
+	});
+
+	it("sends Sprint Allocation QUERY filters to Notion with the shared pagination contract", async () => {
+		const fetchMock = stubNotionFetch();
+
+		const response = await fetchWorker("/api/sprint-allocations", {
+			method: "QUERY",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				filters: {
+					sprintIds: ["44444444-4444-4444-4444-444444444444"],
+					jiraIds: ["55555555-5555-5555-5555-555555555555"],
+					spilled: true,
+				},
+				pageSize: 5,
+				cursor: "query-cursor",
+			}),
+		});
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Accept-Query")).toBe("application/json");
+		expectNotionRequest(fetchMock, {
+			page_size: 5,
+			start_cursor: "query-cursor",
+			filter: {
+				and: [
+					validForListFilter,
+					sprintFilter,
+					jiraFilter,
+					{ property: "Spilled", formula: { checkbox: { equals: true } } },
+				],
+			},
+		});
+	});
+
+	it("rejects unknown Sprint Allocation QUERY filters before calling Notion", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/sprint-allocations", {
+			method: "QUERY",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ filters: { unexpected: true } }),
+		});
+
+		expect(response.status).toBe(400);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it("lets unknown Sprint Allocation subpaths fall through to the main Worker 404", async () => {
