@@ -137,16 +137,26 @@ function allowHeaderForPath(pathname: string): string | null {
 		return "GET, QUERY, POST, OPTIONS";
 	}
 
-	if (pathname === "/api/sprint-allocations") {
-		return "GET, QUERY, OPTIONS";
-	}
-
 	if (pathname === "/api/jiras/meta") {
 		return "GET, OPTIONS";
 	}
 
 	if (pathname === "/api/jiras/options") {
 		return "QUERY, OPTIONS";
+	}
+
+	if (
+		["/api/jiras/active", "/api/jiras/blocked", "/api/jiras/spillovers", "/api/jiras/appraisal", "/api/jiras/demo-pending", "/api/jiras/demoed"].includes(pathname)
+	) {
+		return null;
+	}
+
+	if (/^\/api\/jiras\/[^/]+$/.test(pathname)) {
+		return "GET, PATCH, OPTIONS";
+	}
+
+	if (pathname === "/api/sprint-allocations") {
+		return "GET, QUERY, OPTIONS";
 	}
 
 	if (["/api/work-logs", "/api/feedback", "/api/work-links"].includes(pathname)) {

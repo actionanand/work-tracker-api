@@ -4,6 +4,7 @@ import {
 	invalidOption,
 	invalidRequest,
 	parseBooleanValue,
+	parseDateValue,
 	parseNotionIdValue,
 	parseOptionIdValue,
 	parseStringArrayValue,
@@ -15,12 +16,14 @@ import {
 	getNotionPage,
 	queryAllNotionDataSourcePages,
 	queryNotionDataSource,
+	updateNotionPage,
 } from "../../shared/notion/notion-client";
 import {
 	checkboxProperty,
 	multiSelectByIdProperty,
 	relationProperty,
 	richTextProperty,
+	selectByIdProperty,
 	statusByIdProperty,
 	titleProperty,
 	type NotionPageProperties,
@@ -42,6 +45,10 @@ import {
 import type { PaginationParams } from "../../shared/pagination/pagination";
 import { sprintAllocationFilters } from "../sprint-allocations/sprint-allocation.filters";
 import { listAllSprintAllocations } from "../sprint-allocations/sprint-allocation.service";
+import { listAllWorkLogs } from "../work-logs/work-log.service";
+import { workLogFilters } from "../work-logs/work-log.filters";
+import { listAllReleaseItems } from "../releases/release.service";
+import { releaseFilters } from "../releases/release.filters";
 import { sprintFilters } from "../sprints/sprint.filters";
 import {
 	buildSprintHistory,
@@ -53,6 +60,7 @@ import { mapJira, type Jira, type NotionJiraPage } from "./jira.mapper";
 import { mapJiraOption, type JiraOption } from "./jira-option.mapper";
 import { normalizeJiraKey } from "./jira.validation";
 import { buildJiraRelationships, type JiraRelationship } from "./jira.relationships";
+import { htmlToMarkdown } from "./jira.markdown";
 
 export interface JiraListResponse<TJira = Jira> {
 	data: TJira[];
@@ -109,6 +117,12 @@ const JIRA_WRITE_FIELDS = new Set([
 	"tagOptionIds",
 	"demoRequired",
 	"appraisal",
+]);
+
+const JIRA_UPDATE_FIELDS = new Set([
+	"summary", "descriptionMarkdown", "descriptionRichTextHtml", "projectId",
+	"statusOptionId", "tagOptionIds", "appraisal", "demoRequired", "demoedDate",
+	"demoNotes", "linkedJiraId", "linkTypeOptionId", "linkReason", "linkedOn", "resolvedOn",
 ]);
 
 interface JiraCreateInput {
@@ -334,13 +348,24 @@ export async function listJiraOptions(
 }
 
 async function enrichJiraDetail(env: Env, jira: Jira): Promise<JiraDetail> {
-	const [enriched, allocations, relationships] = await Promise.all([
+	const [enriched, allocations, relationships, workLogs, releaseItems] = await Promise.all([
 		enrichJira(env, jira),
 		listAllSprintAllocations(env, sprintAllocationFilters.jira(jira.id)),
 		buildJiraRelationships(env, jira),
+		listAllWorkLogs(env, workLogFilters.jira(jira.id)),
+		listAllReleaseItems(env, releaseFilters.jira(jira.id)),
 	]);
 	const sprintHistory = buildSprintHistory(enriched.sprints, allocations);
 	const spillEvents = deriveSpillEvents(sprintHistory);
+	const timeline = enriched.sprints.reduce(
+		(result, sprint) => ({
+			startedDate: sprint.startDate && (!result.startedDate || sprint.startDate < result.startedDate) ? sprint.startDate : result.startedDate,
+			endedDate: sprint.endDate && (!result.endedDate || sprint.endDate > result.endedDate) ? sprint.endDate : result.endedDate,
+		}),
+		{ startedDate: null as string | null, endedDate: null as string | null },
+	);
+	workLogs.sort((a, b) => (a.date ?? "9999-12-31").localeCompare(b.date ?? "9999-12-31") || a.createdTime.localeCompare(b.createdTime) || a.id.localeCompare(b.id));
+	releaseItems.sort((a, b) => (a.confirmedReleaseDate ?? a.formalAnnouncedDate ?? a.createdTime).localeCompare(b.confirmedReleaseDate ?? b.formalAnnouncedDate ?? b.createdTime) || a.id.localeCompare(b.id));
 
 	return {
 		...enriched,
@@ -349,7 +374,45 @@ async function enrichJiraDetail(env: Env, jira: Jira): Promise<JiraDetail> {
 		spillEvents,
 		latestSpill: spillEvents[spillEvents.length - 1] ?? null,
 		spillHistoryConsistent: spillEvents.length === jira.spilloverCount,
+		timeline,
+		workLogs,
+		workLogCount: workLogs.length,
+		releaseItems,
+		releaseItemCount: releaseItems.length,
 	};
+}
+
+async function validateRelatedPage(env: Env, pageId: string, dataSourceId: string, field: string): Promise<void> {
+	try {
+		const page = await getNotionPage<NotionPageWithParent>({ env, pageId });
+		if (!pageBelongsToDataSource(page, dataSourceId)) throw new Error("wrong source");
+	} catch (error) {
+		if (error instanceof JiraWriteValidationError) throw error;
+		throw new JiraWriteValidationError(invalidRequest(`Expected a ${field === "projectId" ? "Project" : "JIRA"} page`, field));
+	}
+}
+
+export async function updateJira(env: Env, jiraKey: string, body: Record<string, unknown>): Promise<JiraDetail> {
+	const disallowed = ensureAllowedFields(body, JIRA_UPDATE_FIELDS);
+	if (disallowed) throw new JiraWriteValidationError(disallowed);
+	if (body.descriptionMarkdown !== undefined && body.descriptionRichTextHtml !== undefined) throw new JiraWriteValidationError(invalidRequest("Provide only one description representation", "descriptionMarkdown"));
+	const current = await getJiraByKey(env, jiraKey);
+	if (!("id" in current)) throw new Error("Unexpected JIRA response");
+	const properties: NotionPageProperties = {};
+	const schema = await getDataSourceProperties(env, env.JIRAS_DATA_SOURCE_ID);
+	const summary = parseStringValue(body.summary, "summary"); if (summary instanceof Response) throw new JiraWriteValidationError(summary); if (summary !== undefined) { if (!summary) throw new JiraWriteValidationError(invalidRequest("Expected a non-empty string", "summary")); properties.Summary = richTextProperty(summary); }
+	const markdown = body.descriptionMarkdown !== undefined ? parseStringValue(body.descriptionMarkdown, "descriptionMarkdown") : body.descriptionRichTextHtml !== undefined ? parseStringValue(body.descriptionRichTextHtml, "descriptionRichTextHtml") : undefined;
+	if (markdown instanceof Response) throw new JiraWriteValidationError(markdown);
+	if (markdown !== undefined) properties.Description = richTextProperty(body.descriptionRichTextHtml !== undefined && markdown !== null ? htmlToMarkdown(markdown) : markdown ?? "");
+	const projectId = parseNotionIdValue(body.projectId, "projectId"); if (projectId instanceof Response) throw new JiraWriteValidationError(projectId); if (projectId !== undefined) { if (projectId) await validateRelatedPage(env, projectId, env.PROJECTS_DATA_SOURCE_ID, "projectId"); properties.Project = relationProperty(projectId ? [projectId] : []); }
+	const linkedJiraId = parseNotionIdValue(body.linkedJiraId, "linkedJiraId"); if (linkedJiraId instanceof Response) throw new JiraWriteValidationError(linkedJiraId); if (linkedJiraId !== undefined) { if (linkedJiraId === current.id) throw new JiraWriteValidationError(invalidRequest("A JIRA cannot link to itself", "linkedJiraId")); if (linkedJiraId) await validateRelatedPage(env, linkedJiraId, env.JIRAS_DATA_SOURCE_ID, "linkedJiraId"); properties["Linked JIRA"] = relationProperty(linkedJiraId ? [linkedJiraId] : []); }
+	for (const [field, property, writer] of [["statusOptionId", "Status", statusByIdProperty], ["linkTypeOptionId", "Link Type", selectByIdProperty]] as const) { const value = parseOptionIdValue(body[field], field); if (value instanceof Response) throw new JiraWriteValidationError(value); if (value !== undefined) { if (value && !validateOptionId(schema, property, value)) throw new JiraWriteValidationError(invalidOption(field)); properties[property] = writer(value); } }
+	const tags = parseStringArrayValue(body.tagOptionIds, "tagOptionIds"); if (tags instanceof Response) throw new JiraWriteValidationError(tags); if (tags !== undefined) { const ids = [...new Set(tags)]; if (ids.some((id) => !validateOptionId(schema, "Tags", id))) throw new JiraWriteValidationError(invalidOption("tagOptionIds")); properties.Tags = multiSelectByIdProperty(ids); }
+	for (const [field, property] of [["appraisal", "Appraisal"], ["demoRequired", "Demo Required"]] as const) { const value = parseBooleanValue(body[field], field); if (value instanceof Response) throw new JiraWriteValidationError(value); if (value !== undefined) properties[property] = checkboxProperty(value); }
+	for (const [field, property] of [["demoedDate", "Demoed Date"], ["linkedOn", "Linked On"], ["resolvedOn", "Resolved On"]] as const) { const value = parseDateValue(body[field], field); if (value instanceof Response) throw new JiraWriteValidationError(value); if (value !== undefined) properties[property] = { date: value ? { start: value } : null }; }
+	for (const [field, property] of [["demoNotes", "Demo Notes"], ["linkReason", "Link Reason"]] as const) { const value = parseStringValue(body[field], field); if (value instanceof Response) throw new JiraWriteValidationError(value); if (value !== undefined) properties[property] = richTextProperty(value ?? ""); }
+	await updateNotionPage({ env, pageId: current.id, properties });
+	return getJiraByKey(env, jiraKey, { includeRelations: true }) as Promise<JiraDetail>;
 }
 
 export async function getJiraByKey(

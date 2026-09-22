@@ -3,7 +3,7 @@ import type {
 	NotionQueryFilter,
 	NotionQuerySort,
 } from "../../shared/notion/notion-client";
-import { queryNotionDataSource } from "../../shared/notion/notion-client";
+import { queryAllNotionDataSourcePages, queryNotionDataSource } from "../../shared/notion/notion-client";
 import {
 	enrichReleaseItems,
 	type EnrichedReleaseItem,
@@ -21,6 +21,18 @@ export interface ReleaseItemListResponse<TReleaseItem = ReleaseItem> {
 	count: number;
 	hasMore: boolean;
 	nextCursor: string | null;
+}
+
+export async function listAllReleaseItems(
+	env: Env,
+	filter: NotionQueryFilter,
+): Promise<ReleaseItem[]> {
+	const pages = await queryAllNotionDataSourcePages<NotionReleasePage>({
+		dataSourceId: env.RELEASE_ITEMS_DATA_SOURCE_ID,
+		env,
+		filter,
+	});
+	return pages.map(mapReleaseItem);
 }
 
 export const releaseAnnouncedDateSorts: NotionQuerySort[] = [

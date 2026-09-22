@@ -43,6 +43,10 @@ Release Items are sorted in Notion. Default, pending, and not-announced response
 
 ## Response Shape
 
+## JIRA Detail History
+
+`GET /api/jiras/:jiraKey?include=relations` includes every related Release Item in `releaseItems`, with `releaseItemCount`. Items are historical data and remain available for older JIRAs. They are ordered by confirmed release date, then formal announced date, then creation time and ID.
+
 Collection endpoints return:
 
 ```json

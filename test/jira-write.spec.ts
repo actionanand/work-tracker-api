@@ -91,6 +91,10 @@ function jiraSchemaResponse() {
 			Description: { type: "rich_text" },
 			"Demoed Date": { type: "date" },
 			"Demo Notes": { type: "rich_text" },
+			"Link Type": {
+				type: "select",
+				select: { options: [{ id: "link-blocks", name: "Blocks", color: "red" }] },
+			},
 		},
 	});
 }
@@ -284,6 +288,31 @@ describe("JIRA create API", () => {
 			`https://api.notion.com/v1/data_sources/${testEnv.JIRAS_DATA_SOURCE_ID}`,
 			expect.objectContaining({ method: "GET" }),
 		);
+	});
+
+	it("returns only PATCH-writable fields for edit metadata", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jiraSchemaResponse());
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker("/api/jiras/meta?mode=edit");
+		const body = (await response.json()) as {
+			fields: Array<Record<string, unknown>>;
+		};
+		const keys = body.fields.map((field) => field.key);
+
+		expect(keys).toEqual([
+			"summary", "descriptionMarkdown", "descriptionRichTextHtml", "projectId",
+			"statusOptionId", "tagOptionIds", "appraisal", "demoRequired",
+			"demoedDate", "demoNotes", "linkedJiraId", "linkTypeOptionId",
+			"linkReason", "linkedOn", "resolvedOn",
+		]);
+		expect(keys).not.toContain("jiraKey");
+		expect(keys).not.toContain("inActiveSprint");
+		expect(body.fields.find((field) => field.key === "projectId")).toMatchObject({ optionsEndpoint: "/api/projects/active" });
+		expect(body.fields.find((field) => field.key === "linkedJiraId")).toMatchObject({ optionsEndpoint: "/api/jiras/options" });
+		expect(body.fields.find((field) => field.key === "statusOptionId")?.options).toEqual([{ id: "status-open", name: "Open", color: "blue" }]);
+		expect(body.fields.find((field) => field.key === "tagOptionIds")?.options).toEqual([{ id: "tag-api", name: "API", color: "green" }, { id: "tag-notion", name: "Notion", color: "purple" }]);
+		expect(body.fields.find((field) => field.key === "linkTypeOptionId")?.options).toEqual([{ id: "link-blocks", name: "Blocks", color: "red" }]);
 	});
 
 	it("creates a mapped JIRA with validated relations, options, and one active Sprint", async () => {
@@ -506,16 +535,18 @@ describe("JIRA create API", () => {
 		expect(findCreateCall(fetchMock)).toBeUndefined();
 	});
 
-	it("advertises create support without adding edit or delete routes", async () => {
+	it("advertises create and edit support without adding delete routes", async () => {
 		const collection = await fetchWorker("/api/jiras", { method: "OPTIONS" });
 		const metadata = await fetchWorker("/api/jiras/meta", { method: "OPTIONS" });
+		const item = await fetchWorker("/api/jiras/LSC-84944", { method: "OPTIONS" });
 
 		expect(collection.headers.get("Allow")).toBe("GET, QUERY, POST, OPTIONS");
 		expect(collection.headers.get("Accept-Query")).toBe("application/json");
 		expect(metadata.headers.get("Allow")).toBe("GET, OPTIONS");
 		expect(metadata.headers.get("Accept-Query")).toBeNull();
+		expect(item.headers.get("Allow")).toBe("GET, PATCH, OPTIONS");
 
-		const fetchMock = vi.fn();
+		const fetchMock = vi.fn().mockResolvedValue(notionResponse([]));
 		vi.stubGlobal("fetch", fetchMock);
 		const patchResponse = await fetchWorker("/api/jiras/LSC-99999", {
 			method: "PATCH",
@@ -524,6 +555,11 @@ describe("JIRA create API", () => {
 		});
 
 		expect(patchResponse.status).toBe(404);
+		expect(await patchResponse.json()).toEqual({ error: "JIRA not found" });
+		expect(fetchMock).toHaveBeenCalledWith(
+			`https://api.notion.com/v1/data_sources/${testEnv.JIRAS_DATA_SOURCE_ID}/query`,
+			expect.objectContaining({ method: "POST" }),
+		);
 		const deleteResponse = await fetchWorker("/api/jiras/LSC-99999", {
 			method: "DELETE",
 		});
@@ -534,6 +570,6 @@ describe("JIRA create API", () => {
 
 		expect(deleteResponse.status).toBe(404);
 		expect(bulkDeleteResponse.status).toBe(404);
-		expect(fetchMock).not.toHaveBeenCalled();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });
