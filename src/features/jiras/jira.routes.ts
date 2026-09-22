@@ -26,6 +26,7 @@ import {
 	getJiraByKey,
 	listJiraOptions,
 	listJiras,
+	updateJira,
 } from "./jira.service";
 import { normalizeJiraKey } from "./jira.validation";
 
@@ -164,6 +165,28 @@ export async function handleJiraRoutes(
 	env: Env,
 ): Promise<Response | null> {
 	if (request.method === "GET" && url.pathname === "/api/jiras/meta") {
+		if (url.searchParams.get("mode") === "edit") {
+			return Response.json(
+				await buildResourceMetadata(env, env.JIRAS_DATA_SOURCE_ID, "jiras", [
+					{ key: "summary", property: "Summary", writable: true },
+					{ key: "descriptionMarkdown", property: "Description", writable: true },
+					{ key: "descriptionRichTextHtml", property: "Description", writable: true },
+					{ key: "projectId", property: "Project", writable: true, optionsEndpoint: "/api/projects/active" },
+					{ key: "statusOptionId", property: "Status", writable: true },
+					{ key: "tagOptionIds", property: "Tags", writable: true },
+					{ key: "appraisal", property: "Appraisal", writable: true },
+					{ key: "demoRequired", property: "Demo Required", writable: true },
+					{ key: "demoedDate", property: "Demoed Date", writable: true },
+					{ key: "demoNotes", property: "Demo Notes", writable: true },
+					{ key: "linkedJiraId", property: "Linked JIRA", writable: true, optionsEndpoint: "/api/jiras/options" },
+					{ key: "linkTypeOptionId", property: "Link Type", writable: true },
+					{ key: "linkReason", property: "Link Reason", writable: true },
+					{ key: "linkedOn", property: "Linked On", writable: true },
+					{ key: "resolvedOn", property: "Resolved On", writable: true },
+				]),
+			);
+		}
+
 		const metadata = await buildResourceMetadata(
 			env,
 			env.JIRAS_DATA_SOURCE_ID,
@@ -222,6 +245,25 @@ export async function handleJiraRoutes(
 			console.error(error);
 
 			return Response.json({ error: "Failed to create JIRA" }, { status: 500 });
+		}
+	}
+
+	if (request.method === "PATCH") {
+		const jiraKey = parseJiraKeyPath(url.pathname);
+		if (!jiraKey) return null;
+		const body = await parseMutationBody(request);
+		if (body instanceof Response) return body;
+		try {
+			return noStore(Response.json({ data: await updateJira(env, jiraKey, body) }));
+		} catch (error) {
+			if (error instanceof JiraWriteValidationError) return error.response;
+			if (error instanceof JiraNotFoundError) return Response.json({ error: "JIRA not found" }, { status: 404 });
+			if (error instanceof DuplicateJiraKeyError) {
+				console.error(error.message);
+				return Response.json({ error: "Duplicate JIRA key found" }, { status: 500 });
+			}
+			console.error(error);
+			return Response.json({ error: "Failed to update JIRA" }, { status: 500 });
 		}
 	}
 

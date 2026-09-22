@@ -6,6 +6,7 @@ import type {
 import {
 	createNotionPage,
 	getNotionPage,
+	queryAllNotionDataSourcePages,
 	queryNotionDataSource,
 	updateNotionPage,
 } from "../../shared/notion/notion-client";
@@ -97,6 +98,18 @@ export async function listWorkLogs(
 		hasMore: notion.has_more,
 		nextCursor: notion.next_cursor,
 	};
+}
+
+export async function listAllWorkLogs(
+	env: Env,
+	filter: NotionQueryFilter,
+): Promise<WorkLog[]> {
+	const pages = await queryAllNotionDataSourcePages<NotionWorkLogPage>({
+		dataSourceId: env.WORK_LOGS_DATA_SOURCE_ID,
+		env,
+		filter,
+	});
+	return pages.map(mapWorkLog);
 }
 
 const WORK_LOG_WRITE_FIELDS = new Set([

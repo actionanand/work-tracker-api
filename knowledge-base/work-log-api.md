@@ -88,6 +88,10 @@ Select fields require Notion option IDs from `/api/work-logs/meta`; display name
 
 ## Response Shape
 
+## JIRA Detail History
+
+`GET /api/jiras/:jiraKey?include=relations` includes all Work Logs related to that JIRA as historical `workLogs`, even when the JIRA is no longer active. The detail query uses the Notion JIRAs relation and follows Notion pagination; public Work Log pagination is unchanged. Results are ordered by Date ascending, then creation time and ID.
+
 Collection endpoints return:
 
 ```json

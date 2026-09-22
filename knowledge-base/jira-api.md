@@ -193,6 +193,12 @@ releaseItemIds
 
 `firstSprintStart` is mapped from the JIRAs `First Sprint Start` formula date.
 
+For `GET /api/jiras/:jiraKey?include=relations`, the response additionally includes complete related `workLogs` and `releaseItems`, their counts, and `timeline`. Work Logs are ordered by date, then creation time and ID. Release Items are ordered by confirmed date, then formal announced date, then creation time and ID. `timeline.startedDate` is the earliest related Sprint start date; `timeline.endedDate` is the latest related Sprint end date, not an issue completion timestamp.
+
+`Description` is a Notion Text property exposed through the Notion API as `rich_text`. The Worker stores and returns Markdown characters literally in `description`.
+
+`PATCH /api/jiras/:jiraKey` accepts partial updates for `summary`, `descriptionMarkdown` or `descriptionRichTextHtml`, project/status/tag options, appraisal, demo fields, and source-owned relationship fields. It does not allow JIRA key, Sprint, Release, reciprocal relationship, formula, rollup, or audit-field updates. The response is `{ "data": <detailed JIRA> }` with `Cache-Control: no-store`.
+
 Relation IDs currently remain raw Notion page IDs:
 
 - `sprintIds`

@@ -3,6 +3,8 @@ import type { EnrichedJira } from "../../shared/relations/relation-enrichment";
 import type { SprintRef } from "../../shared/relations/relation-types";
 import { sortSprintRefs } from "../../shared/relations/relation-enrichment";
 import type { JiraRelationship } from "./jira.relationships";
+import type { WorkLog } from "../work-logs/work-log.mapper";
+import type { ReleaseItem } from "../releases/release.mapper";
 
 export interface SprintHistoryItem {
 	sprint: SprintRef;
@@ -104,4 +106,9 @@ export interface JiraDetail extends EnrichedJira {
 	spillEvents: SpillEvent[];
 	latestSpill: SpillEvent | null;
 	spillHistoryConsistent: boolean;
+	timeline: { startedDate: string | null; endedDate: string | null };
+	workLogs: WorkLog[];
+	workLogCount: number;
+	releaseItems: ReleaseItem[];
+	releaseItemCount: number;
 }

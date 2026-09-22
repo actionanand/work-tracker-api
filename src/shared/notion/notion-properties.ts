@@ -1,5 +1,18 @@
 export type NotionPageProperties = Record<string, unknown>;
 
+const NOTION_RICH_TEXT_FRAGMENT_LENGTH = 2_000;
+
+function textFragments(value: string): Array<{ text: { content: string } }> {
+	const characters = Array.from(value);
+	const fragments: Array<{ text: { content: string } }> = [];
+
+	for (let index = 0; index < characters.length; index += NOTION_RICH_TEXT_FRAGMENT_LENGTH) {
+		fragments.push({ text: { content: characters.slice(index, index + NOTION_RICH_TEXT_FRAGMENT_LENGTH).join("") } });
+	}
+
+	return fragments;
+}
+
 export function titleProperty(value: string): unknown {
 	return {
 		title: value ? [{ text: { content: value } }] : [],
@@ -8,7 +21,7 @@ export function titleProperty(value: string): unknown {
 
 export function richTextProperty(value: string): unknown {
 	return {
-		rich_text: value ? [{ text: { content: value } }] : [],
+		rich_text: value ? textFragments(value) : [],
 	};
 }
 
