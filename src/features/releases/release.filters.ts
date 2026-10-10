@@ -1,5 +1,16 @@
 import type { NotionQueryFilter } from "../../shared/notion/notion-client";
 
+const dateProperties = {
+	announcement: "Formal Announced Date",
+	release: "Confirmed Release Date",
+} as const;
+
+export type ReleaseDateType = keyof typeof dateProperties;
+
+export function releaseDateProperty(dateType: ReleaseDateType): string {
+	return dateProperties[dateType];
+}
+
 export const releaseFilters = {
 	pending: {
 		and: [
@@ -74,10 +85,23 @@ export const releaseFilters = {
 			on_or_before: to,
 		},
 	}),
+	dateEquals: (dateType: ReleaseDateType, date: string): NotionQueryFilter => ({
+		property: releaseDateProperty(dateType),
+		date: { equals: date },
+	}),
+	dateFrom: (dateType: ReleaseDateType, date: string): NotionQueryFilter => ({
+		property: releaseDateProperty(dateType),
+		date: { on_or_after: date },
+	}),
+	dateTo: (dateType: ReleaseDateType, date: string): NotionQueryFilter => ({
+		property: releaseDateProperty(dateType),
+		date: { on_or_before: date },
+	}),
 } satisfies Record<
 	string,
 	| NotionQueryFilter
 	| ((value: string) => NotionQueryFilter)
+	| ((dateType: ReleaseDateType, date: string) => NotionQueryFilter)
 	| ((values: string[]) => NotionQueryFilter | undefined)
 >;
 

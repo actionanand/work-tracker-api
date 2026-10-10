@@ -393,9 +393,11 @@ function stubNotionFetchResponse(responseBody: unknown) {
 	return fetchMock;
 }
 
-async function fetchWorker(path: string): Promise<Response> {
+async function fetchWorker(path: string, init: RequestInit = {}): Promise<Response> {
 	const request = new IncomingRequest(`http://example.com${path}`, {
-		headers: await createAuthHeaders(testEnv),
+		method: init.method,
+		body: init.body,
+		headers: { ...(await createAuthHeaders(testEnv)), ...Object.fromEntries(new Headers(init.headers)) },
 	});
 	const ctx = createExecutionContext();
 
@@ -404,6 +406,14 @@ async function fetchWorker(path: string): Promise<Response> {
 	await waitOnExecutionContext(ctx);
 
 	return response;
+}
+
+function jsonPatch(body: unknown): RequestInit {
+	return { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+
+function releasePage(id: string, announced: string | null = null, confirmed: string | null = null) {
+	return { ...fullReleasePage, id, properties: { ...fullReleasePage.properties, "Formal Announced Date": { date: announced ? { start: announced } : null }, "Confirmed Release Date": { date: confirmed ? { start: confirmed } : null } } };
 }
 
 function expectNotionRequest(
@@ -527,5 +537,56 @@ describe("Release API routes", () => {
 		);
 
 		expect(response).toBeNull();
+	});
+
+	it.each([
+		[[], "announcement", "2026-10-15", "releaseItemIds"],
+		[["invalid"], "announcement", "2026-10-15", "releaseItemIds"],
+		[[jiraId], "invalid", "2026-10-15", "dateType"],
+		[[jiraId], "announcement", "invalid", "date"],
+	])("rejects invalid bulk-date input before Notion mutation", async (releaseItemIds, dateType, date, field) => {
+		const fetchMock = stubNotionFetch();
+		const response = await fetchWorker("/api/releases/bulk-date", jsonPatch({ releaseItemIds, dateType, date }));
+		expect(response.status).toBe(400);
+		expect((await response.json() as { field?: string }).field).toBe(field);
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("deduplicates batch IDs, preflights them before updates, and writes one date", async () => {
+		const first = releasePage("11111111-1111-1111-1111-111111111111");
+		const second = releasePage("22222222-2222-2222-2222-222222222222");
+		const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+			if (init?.method === "GET") return Promise.resolve(Response.json(url.endsWith(first.id) ? { ...first, parent: { data_source_id: testEnv.RELEASE_ITEMS_DATA_SOURCE_ID } } : { ...second, parent: { data_source_id: testEnv.RELEASE_ITEMS_DATA_SOURCE_ID } }));
+			return Promise.resolve(Response.json(init?.method === "PATCH" ? (url.endsWith(first.id) ? first : second) : {}));
+		}); vi.stubGlobal("fetch", fetchMock);
+		const response = await fetchWorker("/api/releases/bulk-date", jsonPatch({ releaseItemIds: [first.id, second.id, first.id], dateType: "announcement", date: "2026-10-15" }));
+		expect(response.status).toBe(200); expect(response.headers.get("Cache-Control")).toBe("no-store");
+		const calls = fetchMock.mock.calls; expect(calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(2);
+		expect(calls.findIndex(([, init]) => init?.method === "PATCH")).toBeGreaterThan(calls.map(([, init]) => init?.method).lastIndexOf("GET"));
+		for (const [, init] of calls.filter(([, init]) => init?.method === "PATCH")) expect(JSON.parse(String(init?.body)).properties["Formal Announced Date"]).toEqual({ date: { start: "2026-10-15" } });
+	});
+
+	it("returns a no-store conflict before any batch PATCH", async () => {
+		const page = releasePage("11111111-1111-1111-1111-111111111111", "2026-10-01");
+		const fetchMock = vi.fn().mockResolvedValue(Response.json({ ...page, parent: { data_source_id: testEnv.RELEASE_ITEMS_DATA_SOURCE_ID } })); vi.stubGlobal("fetch", fetchMock);
+		const response = await fetchWorker("/api/releases/bulk-date", jsonPatch({ releaseItemIds: [page.id], dateType: "announcement", date: "2026-10-15" }));
+		expect(response.status).toBe(409); expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+	});
+
+	it("queries and aggregates the calendar across all cursors", async () => {
+		const first = releasePage("one", "2026-10-10"); const second = releasePage("two", "2026-10-03"); const third = releasePage("three", "2026-10-10");
+		const fetchMock = vi.fn((_url: string, init?: RequestInit) => Promise.resolve(Response.json(JSON.parse(String(init?.body)).start_cursor ? { results: [third], has_more: false, next_cursor: null } : { results: [first, second], has_more: true, next_cursor: "next" })));
+		vi.stubGlobal("fetch", fetchMock);
+		const response = await fetchWorker("/api/releases/calendar?dateType=announcement&from=2026-10-01&to=2026-10-31");
+		expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ totalItems: 3, dates: [{ date: "2026-10-03", count: 1 }, { date: "2026-10-10", count: 2 }] });
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("uses the selected exact-date property with pagination", async () => {
+		const fetchMock = stubNotionFetchResponse({ results: [fullReleasePage], has_more: true, next_cursor: "next" });
+		const response = await fetchWorker("/api/releases/by-date?dateType=release&date=2026-10-18&pageSize=10&cursor=cursor");
+		expect(response.status).toBe(200); expectNotionRequest(fetchMock, { page_size: 10, start_cursor: "cursor", filter: { property: "Confirmed Release Date", date: { equals: "2026-10-18" } }, sorts: [{ property: "Confirmed Release Date", direction: "ascending" }] });
 	});
 });
