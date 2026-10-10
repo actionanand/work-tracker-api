@@ -223,6 +223,9 @@ Layer responsibilities:
 | `GET` | `/api/releases/pending` | Release Items formally announced but not yet confirmed. |
 | `GET` | `/api/releases/confirmed` | Release Items with a confirmed release date. |
 | `GET` | `/api/releases/not-announced` | Release Items without a formal announced date. |
+| `PATCH` | `/api/releases/bulk-date` | Batch-set an announcement or confirmed release date after preflight. |
+| `GET` | `/api/releases/calendar` | Release date calendar summary. |
+| `GET` | `/api/releases/by-date` | Release Items for an exact selected date. |
 | `GET` | `/api/feedback` | All Feedback from the configured Notion data source, sorted by Date descending. |
 | `GET` | `/api/feedback/appraisal` | Feedback with appraisal contexts. |
 | `GET` | `/api/feedback/improvement-follow-up` | Feedback marked as improvement or suggestion. |

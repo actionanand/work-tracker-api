@@ -10,6 +10,15 @@ This document describes the currently implemented Release Items read API.
 | `GET` | `/api/releases/pending` | Query Release Items pending confirmation. |
 | `GET` | `/api/releases/confirmed` | Query confirmed Release Items. |
 | `GET` | `/api/releases/not-announced` | Query Release Items that have not been formally announced. |
+| `PATCH` | `/api/releases/bulk-date` | Set one Formal Announced Date or Confirmed Release Date across selected Release Items. |
+| `GET` | `/api/releases/calendar` | Discover Release Item counts by announcement or release date in a bounded range. |
+| `GET` | `/api/releases/by-date` | Query Release Items for one exact announcement or release date. |
+
+## Batch Dates And Calendar
+
+`PATCH /api/releases/bulk-date` accepts `releaseItemIds`, `dateType` (`announcement` or `release`), and a `YYYY-MM-DD` date. Every selected Release Item is preflighted before updates begin. If any selected target field is already populated, the endpoint returns `409` with `RELEASE_DATE_CONFLICT` and no update starts. Notion multi-page writes are not transactional: an infrastructure failure after updates begin is returned as a safe partial result.
+
+`GET /api/releases/calendar?dateType=announcement&from=2026-10-01&to=2026-10-31` returns sorted dates and Release Item counts. Ranges are limited to 366 days. `GET /api/releases/by-date?dateType=release&date=2026-10-15&include=relations` supports shared pagination and relation enrichment. Existing `/api/releases?from&to` continues to filter Formal Announced Date.
 
 Unknown paths such as `/api/releases/random` or `/api/releases/foo/bar` are not handled by `handleReleaseRoutes()` and fall through to the main Worker 404.
 
