@@ -200,6 +200,8 @@ firstSprintStart
 
 `Spill Reason` belongs to the receiving allocation, not the JIRA. Chronological allocations therefore derive spill history: the second allocation supplies the reason for Spill #1, the third for Spill #2, and so on. `Spilled` and `First Sprint Start` are Notion formulas; `Sprint Start` is a Notion date rollup.
 
+Spill reasons are edited through the JIRA-domain endpoint `PATCH /api/jiras/:jiraKey/spills/:spillNumber/reason`; clients do not provide Sprint Allocation page IDs.
+
 Relation values are returned as raw Notion page IDs. Relation-name resolution is intentionally not implemented yet.
 
 ## Response Shape

@@ -155,6 +155,10 @@ function allowHeaderForPath(pathname: string): string | null {
 		return "GET, PATCH, OPTIONS";
 	}
 
+	if (/^\/api\/jiras\/[^/]+\/spills\/[^/]+\/reason$/.test(pathname)) {
+		return "PATCH, OPTIONS";
+	}
+
 	if (pathname === "/api/sprint-allocations") {
 		return "GET, QUERY, OPTIONS";
 	}

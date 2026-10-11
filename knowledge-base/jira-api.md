@@ -197,6 +197,12 @@ For `GET /api/jiras/:jiraKey?include=relations`, the response additionally inclu
 
 `Description` is a Notion Text property exposed through the Notion API as `rich_text`. The Worker stores and returns Markdown characters literally in `description`.
 
+`POST /api/jiras` also accepts optional `descriptionMarkdown`, which is stored literally in the same Description property.
+
+## Spill Reasons
+
+`PATCH /api/jiras/:jiraKey/spills/:spillNumber/reason` accepts `{ "reasonMarkdown": "**Blocked** by DevOps" }` for JIRA-detail editing. The client supplies a JIRA key and a positive spill number, never a Sprint Allocation ID. The Worker orders Sprint history chronologically and writes raw Markdown to the receiving Sprint Allocation's `Spill Reason`: Spill #1 uses the second allocation, Spill #2 the third, and so on. An empty string clears the reason. `Spilled` remains a read-only formula.
+
 `PATCH /api/jiras/:jiraKey` accepts partial updates for `summary`, `descriptionMarkdown` or `descriptionRichTextHtml`, project/status/tag options, appraisal, demo fields, and source-owned relationship fields. It does not allow JIRA key, Sprint, Release, reciprocal relationship, formula, rollup, or audit-field updates. The response is `{ "data": <detailed JIRA> }` with `Cache-Control: no-store`.
 
 Relation IDs currently remain raw Notion page IDs:

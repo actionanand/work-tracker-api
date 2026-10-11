@@ -257,6 +257,7 @@ describe("JIRA create API", () => {
 		expect(body.fields.map((field) => field.key)).toEqual([
 			"jiraKey",
 			"summary",
+			"descriptionMarkdown",
 			"projectId",
 			"statusOptionId",
 			"inActiveSprint",
@@ -348,6 +349,7 @@ describe("JIRA create API", () => {
 			properties: {
 				"JIRA Key": { title: [{ text: { content: "LSC-99999" } }] },
 				Summary: { rich_text: [{ text: { content: "Temporary API JIRA" } }] },
+				Description: { rich_text: [] },
 				Project: { relation: [{ id: projectId }] },
 				Status: { status: { id: "status-open" } },
 				Sprints: { relation: [{ id: activeSprintId }] },
@@ -395,6 +397,32 @@ describe("JIRA create API", () => {
 				String(url).includes(testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID),
 			),
 		).toBe(false);
+	});
+
+	it("stores create-time description Markdown literally", async () => {
+		const fetchMock = stubJiraWriteFetch();
+		const markdown = "## Upgrade\n\n- Angular\n- Backstage\n\n**Important**";
+
+		const response = await fetchWorker(
+			"/api/jiras",
+			postJson({ jiraKey: "LSC-99999", summary: "Temporary API JIRA", descriptionMarkdown: markdown }),
+		);
+
+		expect(response.status).toBe(201);
+		const payload = JSON.parse(String(findCreateCall(fetchMock)?.[1]?.body));
+		expect(payload.properties.Description).toEqual({ rich_text: [{ text: { content: markdown } }] });
+	});
+
+	it("rejects a non-string create-time description", async () => {
+		const fetchMock = stubJiraWriteFetch();
+		const response = await fetchWorker(
+			"/api/jiras",
+			postJson({ jiraKey: "LSC-99999", summary: "Temporary API JIRA", descriptionMarkdown: 1 }),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({ error: "Invalid request", field: "descriptionMarkdown", message: "Expected a string" });
+		expect(findCreateCall(fetchMock)).toBeUndefined();
 	});
 
 	it("uses defaults and skips the active Sprint query when inActiveSprint is omitted", async () => {

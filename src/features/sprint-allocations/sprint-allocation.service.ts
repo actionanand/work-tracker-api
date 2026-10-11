@@ -3,7 +3,11 @@ import type { NotionQueryFilter } from "../../shared/notion/notion-client";
 import {
 	queryAllNotionDataSourcePages,
 	queryNotionDataSource,
+	getNotionPage,
+	updateNotionPage,
 } from "../../shared/notion/notion-client";
+import { richTextProperty } from "../../shared/notion/notion-properties";
+import { pageBelongsToDataSource, type NotionPageWithParent } from "../../shared/notion/notion-page-ownership";
 import type { PaginationParams } from "../../shared/pagination/pagination";
 import {
 	mapSprintAllocation,
@@ -58,4 +62,12 @@ export async function listAllSprintAllocations(
 	});
 
 	return pages.map(mapSprintAllocation);
+}
+
+export class SprintAllocationNotWritableError extends Error {}
+
+export async function updateSprintAllocationSpillReason(env: Env, allocationId: string, reasonMarkdown: string): Promise<SprintAllocation> {
+	const page = await getNotionPage<NotionSprintAllocationPage & NotionPageWithParent>({ env, pageId: allocationId });
+	if (!pageBelongsToDataSource(page, env.SPRINT_ALLOCATIONS_DATA_SOURCE_ID)) throw new SprintAllocationNotWritableError();
+	return mapSprintAllocation(await updateNotionPage<NotionSprintAllocationPage>({ env, pageId: allocationId, properties: { "Spill Reason": richTextProperty(reasonMarkdown) } }));
 }
