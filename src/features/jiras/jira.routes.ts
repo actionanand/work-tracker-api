@@ -257,7 +257,10 @@ export async function handleJiraRoutes(
 	);
 	if (request.method === "PATCH" && spillReasonMatch) {
 		const rawSpillNumber = spillReasonMatch[2];
-		const jiraKey = normalizeJiraKey(decodeURIComponent(spillReasonMatch[1]).trim());
+		const decodedJiraKey = decodeJiraKeyPathSegment(spillReasonMatch[1]);
+		if (decodedJiraKey === null) return null;
+
+		const jiraKey = normalizeJiraKey(decodedJiraKey);
 		const spillNumber = Number(rawSpillNumber);
 
 		if (!jiraKey || !/^[1-9]\d*$/.test(rawSpillNumber) || !Number.isSafeInteger(spillNumber)) {
@@ -524,13 +527,14 @@ function parseJiraKeyPath(pathname: string): string | null {
 		return null;
 	}
 
-	let jiraKey: string;
+	const jiraKey = decodeJiraKeyPathSegment(match[1]);
+	return jiraKey === null ? null : normalizeJiraKey(jiraKey);
+}
 
+function decodeJiraKeyPathSegment(segment: string): string | null {
 	try {
-		jiraKey = decodeURIComponent(match[1]).trim();
+		return decodeURIComponent(segment).trim();
 	} catch {
 		return null;
 	}
-
-	return normalizeJiraKey(jiraKey);
 }

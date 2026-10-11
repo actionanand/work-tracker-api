@@ -279,6 +279,19 @@ describe("JIRA spill reason route", () => {
 		},
 	);
 
+	it("treats malformed JIRA-key encoding as an unmatched route before Notion", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const response = await fetchWorker(
+			"/api/jiras/%E0%A4%A/spills/1/reason",
+			patch({ reasonMarkdown: "Blocked" }),
+		);
+
+		expect(response.status).toBe(404);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it("advertises PATCH only for spill reason OPTIONS", async () => {
 		const response = await fetchWorker("/api/jiras/LSC-84944/spills/1/reason", { method: "OPTIONS" });
 		expect(response.status).toBe(204);
