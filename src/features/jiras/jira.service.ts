@@ -44,7 +44,7 @@ import {
 } from "../../shared/relations/relation-enrichment";
 import type { PaginationParams } from "../../shared/pagination/pagination";
 import { sprintAllocationFilters } from "../sprint-allocations/sprint-allocation.filters";
-import { listAllSprintAllocations } from "../sprint-allocations/sprint-allocation.service";
+import { listAllSprintAllocations, updateSprintAllocationSpillReason } from "../sprint-allocations/sprint-allocation.service";
 import { listAllWorkLogs } from "../work-logs/work-log.service";
 import { workLogFilters } from "../work-logs/work-log.filters";
 import { listAllReleaseItems } from "../releases/release.service";
@@ -111,6 +111,7 @@ export class ActiveSprintConfigurationError extends Error {
 const JIRA_WRITE_FIELDS = new Set([
 	"jiraKey",
 	"summary",
+	"descriptionMarkdown",
 	"projectId",
 	"statusOptionId",
 	"inActiveSprint",
@@ -128,6 +129,7 @@ const JIRA_UPDATE_FIELDS = new Set([
 interface JiraCreateInput {
 	jiraKey: string;
 	summary: string;
+	descriptionMarkdown: string;
 	projectId: string | null;
 	statusOptionId: string | null;
 	inActiveSprint: boolean;
@@ -222,6 +224,7 @@ export async function createJira(
 	const properties: NotionPageProperties = {
 		"JIRA Key": titleProperty(input.jiraKey),
 		Summary: richTextProperty(input.summary),
+		Description: richTextProperty(input.descriptionMarkdown),
 		Project: relationProperty(input.projectId ? [input.projectId] : []),
 		Status: statusByIdProperty(input.statusOptionId),
 		Sprints: relationProperty(activeSprintId ? [activeSprintId] : []),
@@ -259,6 +262,9 @@ function parseJiraCreateInput(body: Record<string, unknown>): JiraCreateInput {
 		);
 	}
 
+	const descriptionMarkdown = parseStringValue(body.descriptionMarkdown, "descriptionMarkdown");
+	if (descriptionMarkdown instanceof Response) throw new JiraWriteValidationError(descriptionMarkdown);
+
 	const projectId = parseNotionIdValue(body.projectId, "projectId");
 	if (projectId instanceof Response) throw new JiraWriteValidationError(projectId);
 
@@ -289,6 +295,7 @@ function parseJiraCreateInput(body: Record<string, unknown>): JiraCreateInput {
 	return {
 		jiraKey,
 		summary,
+		descriptionMarkdown: descriptionMarkdown ?? "",
 		projectId: projectId ?? null,
 		statusOptionId: statusOptionId ?? null,
 		inActiveSprint: inActiveSprint ?? false,
@@ -433,6 +440,28 @@ export async function getJiraByKey(
 	return options.includeRelations
 		? enrichJiraDetail(env, result.data[0] as Jira)
 		: result.data[0];
+}
+
+export class SpillReasonConflictError extends Error {
+	constructor(readonly code: "JIRA_NOT_SPILLED" | "SPILL_EVENT_NOT_FOUND" | "SPILL_ALLOCATION_MISSING" | "SPILL_ALLOCATION_CONFLICT", readonly spillNumber?: number, readonly availableSpills?: number, readonly allocationCount?: number) { super(code); }
+}
+
+export async function updateJiraSpillReason(env: Env, jiraKey: string, spillNumber: number, reasonMarkdown: string): Promise<JiraDetail> {
+	const jira = await getJiraByKey(env, jiraKey);
+	const base = jira as Jira;
+	const [enriched, allocations] = await Promise.all([
+		enrichJira(env, base),
+		listAllSprintAllocations(env, sprintAllocationFilters.jira(base.id)),
+	]);
+	const history = buildSprintHistory(enriched.sprints, allocations);
+	const events = deriveSpillEvents(history);
+	if (!events.length) throw new SpillReasonConflictError("JIRA_NOT_SPILLED");
+	if (spillNumber > events.length) throw new SpillReasonConflictError("SPILL_EVENT_NOT_FOUND", spillNumber, events.length);
+	const target = history[spillNumber];
+	if (target.allocationConflict) throw new SpillReasonConflictError("SPILL_ALLOCATION_CONFLICT", spillNumber, undefined, target.allocationCount);
+	if (!target?.allocationId) throw new SpillReasonConflictError("SPILL_ALLOCATION_MISSING", spillNumber);
+	await updateSprintAllocationSpillReason(env, target.allocationId, reasonMarkdown);
+	return enrichJiraDetail(env, base);
 }
 
 export async function listAllJiras(

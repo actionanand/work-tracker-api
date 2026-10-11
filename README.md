@@ -226,6 +226,7 @@ Layer responsibilities:
 | `PATCH` | `/api/releases/bulk-date` | Batch-set an announcement or confirmed release date after preflight. |
 | `GET` | `/api/releases/calendar` | Release date calendar summary. |
 | `GET` | `/api/releases/by-date` | Release Items for an exact selected date. |
+| `PATCH` | `/api/jiras/:jiraKey/spills/:spillNumber/reason` | Update the receiving Sprint Allocation's raw-Markdown spill reason. |
 | `GET` | `/api/feedback` | All Feedback from the configured Notion data source, sorted by Date descending. |
 | `GET` | `/api/feedback/appraisal` | Feedback with appraisal contexts. |
 | `GET` | `/api/feedback/improvement-follow-up` | Feedback marked as improvement or suggestion. |

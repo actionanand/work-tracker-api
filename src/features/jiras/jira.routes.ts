@@ -3,6 +3,7 @@ import { parseDomainQueryRequest, withAcceptQuery } from "../../shared/http/http
 import { isRecord, parseJsonRequestBody } from "../../shared/http/request-body";
 import {
 	parseBooleanValue,
+	ensureAllowedFields,
 	invalidRequest,
 	parseNotionIdArrayValue,
 	parseStringArrayValue,
@@ -27,6 +28,8 @@ import {
 	listJiraOptions,
 	listJiras,
 	updateJira,
+	updateJiraSpillReason,
+	SpillReasonConflictError,
 } from "./jira.service";
 import { normalizeJiraKey } from "./jira.validation";
 
@@ -194,6 +197,7 @@ export async function handleJiraRoutes(
 			[
 				{ key: "jiraKey", property: "JIRA Key", writable: true },
 				{ key: "summary", property: "Summary", writable: true },
+				{ key: "descriptionMarkdown", property: "Description", writable: true },
 				{
 					key: "projectId",
 					property: "Project",
@@ -207,7 +211,7 @@ export async function handleJiraRoutes(
 			],
 		);
 
-		metadata.fields.splice(4, 0, {
+		metadata.fields.splice(5, 0, {
 			key: "inActiveSprint",
 			label: "In Active Sprint",
 			type: "checkbox",
@@ -245,6 +249,54 @@ export async function handleJiraRoutes(
 			console.error(error);
 
 			return Response.json({ error: "Failed to create JIRA" }, { status: 500 });
+		}
+	}
+
+	const spillReasonMatch = url.pathname.match(
+		/^\/api\/jiras\/([^/]+)\/spills\/([^/]+)\/reason$/,
+	);
+	if (request.method === "PATCH" && spillReasonMatch) {
+		const rawSpillNumber = spillReasonMatch[2];
+		const jiraKey = normalizeJiraKey(decodeURIComponent(spillReasonMatch[1]).trim());
+		const spillNumber = Number(rawSpillNumber);
+
+		if (!jiraKey || !/^[1-9]\d*$/.test(rawSpillNumber) || !Number.isSafeInteger(spillNumber)) {
+			return invalidRequest("Expected a positive integer spill number", "spillNumber");
+		}
+
+		const body = await parseMutationBody(request);
+		if (body instanceof Response) return body;
+
+		const invalid = ensureAllowedFields(body, new Set(["reasonMarkdown"]));
+		if (invalid) return invalid;
+
+		if (!("reasonMarkdown" in body) || typeof body.reasonMarkdown !== "string") {
+			return invalidRequest("Expected a string", "reasonMarkdown");
+		}
+
+		try {
+			return noStore(
+				Response.json({
+					data: await updateJiraSpillReason(
+						env,
+						jiraKey,
+						spillNumber,
+						body.reasonMarkdown,
+					),
+				}),
+			);
+		} catch (error) {
+			if (error instanceof JiraNotFoundError) return Response.json({ error: "JIRA not found" }, { status: 404 });
+			if (error instanceof SpillReasonConflictError) {
+				const bodies: Record<string, unknown> = {
+					JIRA_NOT_SPILLED: { error: "JIRA has no spill event", code: error.code },
+					SPILL_EVENT_NOT_FOUND: { error: "Spill event does not exist", code: error.code, spillNumber, availableSpills: error.availableSpills },
+					SPILL_ALLOCATION_MISSING: { error: "Spill allocation is missing", code: error.code, spillNumber },
+					SPILL_ALLOCATION_CONFLICT: { error: "Spill allocation is ambiguous", code: error.code, spillNumber, allocationCount: error.allocationCount },
+				};
+				return Response.json(bodies[error.code], { status: 409 });
+			}
+			console.error(error); return Response.json({ error: "Failed to update spill reason" }, { status: 500 });
 		}
 	}
 
