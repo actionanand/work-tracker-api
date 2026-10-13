@@ -47,6 +47,10 @@ interface TestWorkCalendarState {
 	weekOffDaysJson: string | null;
 }
 
+export interface TestAlterControlState {
+	row: { alter_sprint_enabled_until: number | null; alter_release_enabled_until: number | null } | null;
+}
+
 class TestD1PreparedStatement {
 	private params: unknown[] = [];
 
@@ -55,6 +59,7 @@ class TestD1PreparedStatement {
 		private readonly rows: Map<string, TestAuthSessionRow>,
 		private readonly operations: string[],
 		private readonly workCalendar: TestWorkCalendarState,
+		private readonly alterControls: TestAlterControlState,
 	) {}
 
 	bind(...params: unknown[]): TestD1PreparedStatement {
@@ -65,6 +70,10 @@ class TestD1PreparedStatement {
 
 	async first<T = unknown>(): Promise<T | null> {
 		this.operations.push(this.sql);
+
+		if (this.sql.includes("FROM alter_controls")) {
+			return (this.alterControls.row ? { ...this.alterControls.row } : null) as T | null;
+		}
 
 		if (this.sql.includes("FROM work_calendar_settings")) {
 			return (this.workCalendar.weekOffDaysJson === null
@@ -121,7 +130,14 @@ class TestD1PreparedStatement {
 		this.operations.push(this.sql);
 		let changes = 0;
 
-		if (this.sql.includes("INSERT INTO work_calendar_settings")) {
+		if (this.sql.includes("INSERT INTO alter_controls")) {
+			const row = this.alterControls.row ?? { alter_sprint_enabled_until: null, alter_release_enabled_until: null };
+			const column = this.sql.includes("(id, alter_sprint_enabled_until,")
+				? "alter_sprint_enabled_until" : "alter_release_enabled_until";
+			row[column] = this.params[0] === null ? null : Number(this.params[0]);
+			this.alterControls.row = row;
+			changes = 1;
+		} else if (this.sql.includes("INSERT INTO work_calendar_settings")) {
 			this.workCalendar.weekOffDaysJson = String(this.params[0]);
 			changes = 1;
 		} else if (this.sql.includes("INSERT INTO auth_sessions")) {
@@ -226,6 +242,7 @@ export interface TestAuthD1Database extends D1Database {
 	readonly rows: Map<string, TestAuthSessionRow>;
 	readonly operations: string[];
 	readonly workCalendar: TestWorkCalendarState;
+	readonly alterControls: TestAlterControlState;
 }
 
 export function createTestAuthDb(
@@ -235,13 +252,15 @@ export function createTestAuthDb(
 	const rows = new Map(initialRows.map((row) => [row.id, { ...row }]));
 	const operations: string[] = [];
 	const workCalendar: TestWorkCalendarState = { weekOffDaysJson: initialWeekOffDaysJson };
+	const alterControls: TestAlterControlState = { row: null };
 
 	return {
 		rows,
 		operations,
 		workCalendar,
+		alterControls,
 		prepare(sql: string) {
-			return new TestD1PreparedStatement(sql, rows, operations, workCalendar);
+			return new TestD1PreparedStatement(sql, rows, operations, workCalendar, alterControls);
 		},
 	} as unknown as TestAuthD1Database;
 }

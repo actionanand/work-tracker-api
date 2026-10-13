@@ -201,6 +201,11 @@ Layer responsibilities:
 | `QUERY` | `/api/jiras` | JSON-body read query for JIRAs with server-side Notion filtering. |
 | `QUERY` | `/api/jiras/options` | Lightweight JIRA picker/autocomplete query for Task relation selection. |
 | `GET` | `/api/sprints` | All Sprints from the configured Notion data source. |
+| `GET`, `PATCH` | `/api/settings/alter-controls` | Persist/read independent 30-minute Sprint and Release write controls. |
+| `POST` | `/api/sprints` | Create a Sprint using Work Calendar weekdays; optionally switch the active Sprint. |
+| `PATCH` | `/api/sprints/:sprintId` | Edit the active Sprint while Alter Sprint is enabled. |
+| `PATCH` | `/api/jiras/:jiraKey/current-sprint` | Add an existing JIRA to the active Sprint and repair its allocation. |
+| `PATCH` | `/api/sprint-allocations/:allocationId` | Update Planned Days in an active Sprint. |
 | `GET` | `/api/sprints/active` | Active Sprints. |
 | `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
 | `GET` | `/api/sprints/:sprintId` | Single Sprint detail with all related JIRAs and Sprint Allocation planning data. |
@@ -220,6 +225,9 @@ Layer responsibilities:
 | `POST` | `/api/work-logs` | Create a Work Log through allow-listed mapped fields. |
 | `PATCH` | `/api/work-logs/:pageId` | Update a Work Log page after page ownership validation. |
 | `GET` | `/api/releases` | All Release Items from the configured Notion data source, sorted by Formal Announced Date descending. |
+| `GET` | `/api/releases/meta` | Live writable Release metadata and Deployment Type options. |
+| `POST` | `/api/releases` | Create a Release Item for a JIRA while Alter Release Management is enabled. |
+| `PATCH`, `DELETE` | `/api/releases/:releaseItemId` | Edit or trash an unconfirmed Release Item while its control is enabled. |
 | `GET` | `/api/releases/pending` | Release Items formally announced but not yet confirmed. |
 | `GET` | `/api/releases/confirmed` | Release Items with a confirmed release date. |
 | `GET` | `/api/releases/not-announced` | Release Items without a formal announced date. |
@@ -535,6 +543,7 @@ Living technical references:
 - [JIRA API](knowledge-base/jira-api.md)
 - [JIRA Picker API](knowledge-base/jira-picker-api.md)
 - [Sprint API](knowledge-base/sprint-api.md)
+- [Alter Controls API](knowledge-base/alter-controls-api.md)
 - [Company, Team, and Project API](knowledge-base/company-team-project-api.md)
 - [Work Log API](knowledge-base/work-log-api.md)
 - [Release API](knowledge-base/release-api.md)

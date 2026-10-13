@@ -11,6 +11,7 @@ import { handleReleaseRoutes } from "./features/releases/release.routes";
 import { handleSprintAllocationRoutes } from "./features/sprint-allocations/sprint-allocation.routes";
 import { handleSprintRoutes } from "./features/sprints/sprint.routes";
 import { handleWorkCalendarRoutes } from "./features/settings/work-calendar.routes";
+import { handleAlterControlRoutes } from "./features/settings/alter-controls.routes";
 import { handleTaskRoutes } from "./features/tasks/task.routes";
 import { handleTeamRoutes } from "./features/teams/team.routes";
 import { handleTodoRoutes } from "./features/todos/todo.routes";
@@ -160,6 +161,9 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 	if (workCalendarResponse) {
 		return workCalendarResponse;
 	}
+
+	const alterControlResponse = await handleAlterControlRoutes(request, url, env);
+	if (alterControlResponse) return alterControlResponse;
 
 	const taskResponse = await handleTaskRoutes(request, url, env);
 

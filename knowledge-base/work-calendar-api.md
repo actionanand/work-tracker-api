@@ -40,4 +40,6 @@ The migration creates one singleton `work_calendar_settings` row location. GET c
 
 ## Responsibility Boundary
 
+Sprint creation and active-Sprint editing also read these saved settings. They map up to two configured weekdays to existing live Notion Week Off 1/2 select IDs, clearing unused selects. The default remains Saturday/Sunday. More than two configured days is valid as a Work Calendar setting but prevents Sprint writes with a safe `409` rather than silently discarding days. See [Sprint API](sprint-api.md).
+
 Office Orbit combines these week-off days with Google Sheets holiday events and Todo recurrence data. Holiday retrieval and previous-working-day traversal do not run in this Worker.

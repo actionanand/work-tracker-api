@@ -10,6 +10,10 @@ import {
 } from "../../shared/pagination/pagination";
 import { parseIncludeRelations } from "../../shared/relations/relation-enrichment";
 import { isRecord, parseJsonRequestBody } from "../../shared/http/request-body";
+import { managedResponse, ManagedWriteError, mutationBody, notionIdSegment } from "../../shared/http/managed-write";
+import { buildResourceMetadata } from "../../shared/notion/notion-schema";
+import { createRelease, updateRelease, deleteRelease, releaseWritableFields } from "./release.write";
+import { requireAlterReleaseManagement } from "../settings/alter-controls.service";
 import { ensureAllowedFields, invalidRequest, parseDateValue, parseNotionIdArrayValue, parseStringValue } from "../../shared/http/validation";
 import { combineReleaseFilters, releaseFilters, type ReleaseDateType } from "./release.filters";
 import {
@@ -150,6 +154,24 @@ export async function handleReleaseRoutes(
 	url: URL,
 	env: Env,
 ): Promise<Response | null> {
+	if (request.method === "GET" && url.pathname === "/api/releases/meta") {
+		return managedResponse(async () => Response.json(await buildResourceMetadata(env, env.RELEASE_ITEMS_DATA_SOURCE_ID, "releases", releaseWritableFields)), "Failed to retrieve Release metadata");
+	}
+	if (request.method === "POST" && url.pathname === "/api/releases") {
+		return managedResponse(async () => Response.json({ data: await createRelease(env, await mutationBody(request)) }, { status: 201 }), "Failed to create Release Item");
+	}
+	const itemMatch = url.pathname.match(/^\/api\/releases\/([^/]+)$/);
+	const reserved = new Set([...releaseRouteConfigs.keys(), "/api/releases/meta", "/api/releases/bulk-date", "/api/releases/calendar", "/api/releases/by-date"]);
+	if (itemMatch && !reserved.has(url.pathname) && ["PATCH", "DELETE"].includes(request.method)) {
+		return managedResponse(async () => {
+			const id = notionIdSegment(itemMatch[1], "releaseItemId");
+			if (request.method === "DELETE") {
+				await deleteRelease(env, id);
+				return new Response(null, { status: 204 });
+			}
+			return Response.json({ data: await updateRelease(env, id, await mutationBody(request)) });
+		}, "Failed to modify Release Item");
+	}
 	if (request.method === "GET" && url.pathname === "/api/releases/calendar") {
 		const dateType = parseReleaseDateType(url.searchParams.get("dateType"));
 		const from = parseDateParam(url, "from");
@@ -180,6 +202,9 @@ export async function handleReleaseRoutes(
 	}
 
 	if (request.method === "PATCH" && url.pathname === "/api/releases/bulk-date") {
+		try { await requireAlterReleaseManagement(env); } catch (error) {
+			return managedResponse(async () => { throw error; }, "Failed to update Release Items");
+		}
 		const parsed = await parseJsonRequestBody(request);
 		if (parsed instanceof Response || !isRecord(parsed.value)) return noStore(parsed instanceof Response ? parsed : invalidRequest("Expected a JSON object"));
 		const unknown = ensureAllowedFields(parsed.value, new Set(["releaseItemIds", "dateType", "date"])); if (unknown) return noStore(unknown);
@@ -195,6 +220,7 @@ export async function handleReleaseRoutes(
 			if (result.failed.length) return noStore(Response.json({ error: "Release batch update partially failed", requested: uniqueIds.length, updated: result.updatedIds.length, allSucceeded: false, updatedIds: result.updatedIds, failed: result.failed.map((id) => ({ id, error: "update-failed" })) }, { status: 502 }));
 			return noStore(Response.json({ dateType, date, requested: uniqueIds.length, updated: result.data.length, allSucceeded: true, data: result.data }));
 		} catch (error) {
+			if (error instanceof ManagedWriteError) return noStore(error.response);
 			if (error instanceof ReleaseBatchConflictError) return noStore(Response.json({ error: "Release date field is already set", code: "RELEASE_DATE_CONFLICT", dateType: error.dateType, conflicts: error.conflicts }, { status: 409 }));
 			if (error instanceof ReleaseBatchOwnershipError) return noStore(invalidRequest("Expected a Release Item page", "releaseItemIds"));
 			return noStore(Response.json({ error: "Failed to update Release Items" }, { status: 500 }));

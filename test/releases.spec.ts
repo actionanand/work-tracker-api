@@ -1,5 +1,6 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { updateAlterControls } from "../src/features/settings/alter-controls.service";
 import { handleReleaseRoutes } from "../src/features/releases/release.routes";
 import worker from "../src/index";
 import type { Env } from "../src/shared/env";
@@ -438,6 +439,10 @@ function expectNotionRequest(
 }
 
 describe("Release API routes", () => {
+	beforeEach(async () => {
+		await updateAlterControls(testEnv, { control: "releaseManagement", enabled: true });
+	});
+
 	afterEach(() => {
 		vi.unstubAllGlobals();
 	});

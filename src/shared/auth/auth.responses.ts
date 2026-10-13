@@ -133,6 +133,17 @@ export function corsPreflightResponse(pathname = ""): Response {
 }
 
 function allowHeaderForPath(pathname: string): string | null {
+	if (pathname === "/api/settings/alter-controls") return "GET, PATCH, OPTIONS";
+	if (pathname === "/api/sprints") return "GET, POST, OPTIONS";
+	if (["/api/sprints/active", "/api/sprints/history"].includes(pathname)) return "GET, OPTIONS";
+	if (/^\/api\/sprints\/[^/]+$/.test(pathname)) return "GET, PATCH, OPTIONS";
+	if (pathname === "/api/sprint-allocations/current") return "GET, OPTIONS";
+	if (/^\/api\/sprint-allocations\/[^/]+$/.test(pathname)) return "PATCH, OPTIONS";
+	if (/^\/api\/jiras\/[^/]+\/current-sprint$/.test(pathname)) return "PATCH, OPTIONS";
+	if (pathname === "/api/releases") return "GET, POST, OPTIONS";
+	if (pathname === "/api/releases/bulk-date") return "PATCH, OPTIONS";
+	if (["/api/releases/meta", "/api/releases/calendar", "/api/releases/by-date", "/api/releases/pending", "/api/releases/confirmed", "/api/releases/not-announced"].includes(pathname)) return "GET, OPTIONS";
+	if (/^\/api\/releases\/[^/]+$/.test(pathname)) return "PATCH, DELETE, OPTIONS";
 	if (pathname === "/api/jiras") {
 		return "GET, QUERY, POST, OPTIONS";
 	}

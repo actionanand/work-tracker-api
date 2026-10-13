@@ -36,6 +36,7 @@ interface NotionReleaseProperty {
 	title?: NotionTextItem[];
 	rich_text?: NotionTextItem[];
 	select?: {
+		id?: string;
 		name?: string;
 	} | null;
 	date?: {

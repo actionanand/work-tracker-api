@@ -105,6 +105,14 @@ export function getOptionNameById(
 	return getOptions(properties[property]).find((option) => option.id === optionId)?.name ?? null;
 }
 
+export function getOptionIdByName(
+	properties: Record<string, NotionPropertySchema>,
+	property: string,
+	name: string,
+): string | null {
+	return getOptions(properties[property]).find((option) => option.name === name)?.id ?? null;
+}
+
 function getOptions(
 	property: NotionPropertySchema | undefined,
 ): Array<{ id: string; name: string; color: string }> {

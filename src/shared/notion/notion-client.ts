@@ -170,6 +170,19 @@ export async function getNotionDataSource<TDataSource = unknown>({
 	return parseNotionResponse(response);
 }
 
+export async function getNotionPageProperty<TResponse = unknown>(
+	env: Env,
+	pageId: string,
+	propertyId: string,
+	startCursor?: string,
+): Promise<TResponse> {
+	const encodedPropertyId = encodeURIComponent(decodeURIComponent(propertyId));
+	const url = new URL(`https://api.notion.com/v1/pages/${pageId}/properties/${encodedPropertyId}`);
+	url.searchParams.set("page_size", "100");
+	if (startCursor) url.searchParams.set("start_cursor", startCursor);
+	return parseNotionResponse(await fetch(url.toString(), { method: "GET", headers: notionJsonHeaders(env) }));
+}
+
 export async function createNotionPage<TPage = unknown>({
 	dataSourceId,
 	parentPageId,

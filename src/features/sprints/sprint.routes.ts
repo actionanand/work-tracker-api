@@ -12,6 +12,8 @@ import { parseIncludeRelations } from "../../shared/relations/relation-enrichmen
 import { listProjectIdsByCompany } from "../projects/project.service";
 import { combineSprintFilters, sprintFilters } from "./sprint.filters";
 import { SprintNotFoundError, getSprintById, listSprints } from "./sprint.service";
+import { managedResponse, mutationBody, noStore } from "../../shared/http/managed-write";
+import { createSprint, updateSprint } from "./sprint.write";
 
 interface SprintRouteConfig {
 	baseFilter?: NotionQueryFilter;
@@ -145,6 +147,16 @@ export async function handleSprintRoutes(
 	env: Env,
 ): Promise<Response | null> {
 	const config = sprintRouteConfigs.get(url.pathname);
+
+	if (request.method === "POST" && url.pathname === "/api/sprints") {
+		return managedResponse(async () => Response.json({ data: await createSprint(env, await mutationBody(request)) }, { status: 201 }), "Failed to create Sprint");
+	}
+	if (request.method === "PATCH" && !config) {
+		const sprintId = parseSprintIdPath(url.pathname);
+		if (!sprintId) return null;
+		if (sprintId instanceof Response) return noStore(sprintId);
+		return managedResponse(async () => Response.json({ data: await updateSprint(env, sprintId, await mutationBody(request)) }), "Failed to update Sprint");
+	}
 
 	if (request.method !== "GET") {
 		return null;

@@ -18,6 +18,8 @@ import {
 	type ReleaseItem,
 } from "./release.mapper";
 import { releaseDateProperty, type ReleaseDateType } from "./release.filters";
+import { requireAlterReleaseManagement } from "../settings/alter-controls.service";
+import { domainError } from "../../shared/http/managed-write";
 
 export interface ReleaseItemListResponse<TReleaseItem = ReleaseItem> {
 	data: TReleaseItem[];
@@ -58,6 +60,7 @@ export async function batchSetReleaseDate(
 	dateType: ReleaseDateType,
 	date: string,
 ): Promise<{ data: ReleaseItem[]; updatedIds: string[]; failed: string[] }> {
+	await requireAlterReleaseManagement(env);
 	const pages: Array<NotionReleasePage & NotionPageWithParent> = [];
 
 	for (const pageId of releaseItemIds) {
@@ -66,17 +69,34 @@ export async function batchSetReleaseDate(
 	if (pages.some((page) => !pageBelongsToDataSource(page, env.RELEASE_ITEMS_DATA_SOURCE_ID))) {
 		throw new ReleaseBatchOwnershipError();
 	}
+	const items = pages.map(mapReleaseItem);
+	const targetDate = (item: ReleaseItem) => dateType === "announcement" ? item.formalAnnouncedDate : item.confirmedReleaseDate;
+	const confirmed = items.filter((item) => item.confirmedReleaseDate !== null && targetDate(item) !== date);
+	if (confirmed.length) {
+		throw domainError(409, "Confirmed Release Items are read-only", "RELEASE_ITEM_CONFIRMED", {
+			conflicts: confirmed.map((item) => ({ id: item.id, componentName: item.componentName, currentDate: item.confirmedReleaseDate })),
+		});
+	}
 	const property = releaseDateProperty(dateType);
-	const conflicts = pages.map(mapReleaseItem).flatMap((item) => {
-		const currentDate = dateType === "announcement" ? item.formalAnnouncedDate : item.confirmedReleaseDate;
-		return currentDate ? [{ id: item.id, componentName: item.componentName, currentDate }] : [];
+	const conflicts = items.flatMap((item) => {
+		const currentDate = targetDate(item);
+		return currentDate && currentDate !== date ? [{ id: item.id, componentName: item.componentName, currentDate }] : [];
 	});
 	if (conflicts.length) throw new ReleaseBatchConflictError(dateType, conflicts);
 	const data: ReleaseItem[] = [];
 	const updatedIds: string[] = [];
 	const failed: string[] = [];
-	for (const page of pages) {
+	await requireAlterReleaseManagement(env);
+	for (let index = 0; index < pages.length; index++) {
+		const page = pages[index];
+		if (targetDate(items[index]) === date) {
+			// Count a replayed row as completed without writing it again.
+			data.push(items[index]);
+			updatedIds.push(page.id);
+			continue;
+		}
 		try {
+			await requireAlterReleaseManagement(env);
 			data.push(mapReleaseItem(await updateNotionPage<NotionReleasePage>({ env, pageId: page.id, properties: { [property]: dateProperty(date) } })));
 			updatedIds.push(page.id);
 		} catch {

@@ -10,6 +10,75 @@ This document describes the Sprints and Sprint Allocations APIs currently implem
 | `GET` | `/api/sprints/active` | Query active sprints. |
 | `GET` | `/api/sprints/history` | Query inactive sprints, sorted by newest Start Date first. |
 | `GET` | `/api/sprints/:sprintId` | Query one Sprint by Notion page ID and include related JIRAs with Sprint Allocation planning data. |
+| `POST` | `/api/sprints` | Create a Sprint using saved Work Calendar week-offs; optionally make it the only active Sprint. |
+| `PATCH` | `/api/sprints/:sprintId` | Edit an active Sprint and refresh its saved week-offs. |
+| `PATCH` | `/api/jiras/:jiraKey/current-sprint` | Assign an existing JIRA to the current active Sprint, repairing its allocation if needed. |
+| `PATCH` | `/api/sprint-allocations/:allocationId` | Edit Planned Days in an active Sprint. |
+
+## Managed Sprint Writes
+
+These four mutations require backend [Alter Sprint](alter-controls-api.md) to be enabled and unexpired. They use `Cache-Control: no-store`. There is no Sprint DELETE API.
+
+Existing `POST /api/jiras` is unchanged: `inActiveSprint: true` still creates a new JIRA in the single active Sprint without this control or automatic Sprint Allocation creation. Current-Sprint assignment is a separate action for an existing JIRA.
+
+### Create and Edit
+
+```http
+POST /api/sprints
+```
+
+```json
+{
+  "sprint": "CRI - 26.4 - Sprint 3",
+  "projectId": "33333333-3333-3333-3333-333333333333",
+  "startDate": "2026-10-28",
+  "endDate": "2026-11-10",
+  "plannedLeaveDays": 0.5,
+  "holidayDays": 0,
+  "makeActive": true
+}
+```
+
+The name is trimmed and required. Project must be a valid Notion page in the Projects datasource. Dates must be real `YYYY-MM-DD` values with End Date on or after Start Date. Leave/holiday values are finite, non-negative numbers, defaulting to zero; decimals are accepted. `makeActive` defaults to false. The Worker does not impose a 14-day duration or invent names.
+
+Week Off 1/2 come from saved Work Calendar settings, defaulting to Saturday/Sunday. Zero or one configured day clears unused selects. More than two configured days returns `409` / `SPRINT_WEEK_OFF_CONFIGURATION_UNSUPPORTED`; a weekday absent from the live Sprint select options returns `409` / `SPRINT_WEEK_OFF_OPTION_MISSING`. No new Notion options are created.
+
+Only Sprint, Project, Start Date, End Date, Week Off 1/2, Planned Leave Days, Holiday Days and Active are written. Formulas, rollups and Allocations are untouched. Success is `201 { "data": <mapped Sprint> }`.
+
+With `makeActive: false`, existing active Sprints remain unchanged. With true, all active Sprints are preflighted before writes; the new Sprint is created inactive, old active Sprints are deactivated, then the new one is activated. A known switch failure attempts compensation and returns `502` / `SPRINT_ACTIVATION_PARTIAL`, never ordinary success. Notion is not transactional; compensation can fail, and simultaneous external edits can race this operation.
+
+`PATCH /api/sprints/:sprintId` accepts a non-empty subset of `sprint`, `projectId`, `startDate`, `endDate`, `plannedLeaveDays`, `holidayDays`. The Sprint must belong to the Sprints datasource and already be active (`409` / `SPRINT_NOT_ACTIVE` otherwise). Date validation uses existing values for omitted dates. Each successful edit refreshes Week Off 1/2 from current settings. Active, makeActive, week-off inputs and calculated fields are not accepted. Success is `200 { "data": <mapped Sprint> }`.
+
+### Add Existing JIRA to Current Sprint
+
+`PATCH /api/jiras/:jiraKey/current-sprint` accepts `{}`. Clients cannot select a Sprint ID. The Worker resolves exactly one active Sprint, returning `ACTIVE_SPRINT_NOT_FOUND` or `ACTIVE_SPRINT_CONFLICT` with `409` when there are zero or multiple active Sprints.
+
+All historical JIRA Sprint relations are preserved, including paginated Notion relation values, and the active Sprint is appended only when absent. The Worker queries allocations by JIRA **and** active Sprint. No allocation creates one with Allocation = JIRA key, Planned Days = 0 and the two relations. One allocation is reused. Multiple allocations return `409` / `SPRINT_ALLOCATION_CONFLICT` before mutations. A missing relation or allocation is repaired independently.
+
+```json
+{
+  "data": "<refreshed JiraDetail>",
+  "currentSprint": "<mapped Sprint>",
+  "allocation": "<mapped SprintAllocation>",
+  "alreadyAssigned": false
+}
+```
+
+`alreadyAssigned` is true only when both sides already existed. Repeated sequential requests do not create duplicate relations or allocations. Notion does not provide a transactional unique JIRA/Sprint constraint; concurrent requests or external changes can still race. An allocation-create failure returns `502` / `SPRINT_ASSIGNMENT_PARTIAL`; retry repairs a missing allocation after a relation was appended.
+
+### Planned Days
+
+```http
+PATCH /api/sprint-allocations/:allocationId
+```
+
+```json
+{ "plannedDays": 3.5 }
+```
+
+Only a finite non-negative `plannedDays` is accepted; zero and decimals are valid. Allocation ownership is checked, it must have exactly one Sprint relation, and that Sprint must belong to the Sprints datasource and be active. Invalid state returns `409` / `SPRINT_ALLOCATION_NOT_ACTIVE`. The exact Notion update writes only Planned Days, preserving Spill Reason, relations and derived fields.
+
+Success returns `{ "data": { "allocation": <updated allocation>, "sprintDetail": <refreshed Sprint detail> } }`. Detail includes capacityDays, availableDays, allocatedDays, remainingDays and JIRAs with their existing spilloverCount. Notion rollups/formulas may briefly lag a successful write; the response reports values read back from Notion.
 
 Static Sprint routes are matched before dynamic Sprint detail lookup. Malformed single-segment Sprint IDs such as `/api/sprints/random` return HTTP 400. Unknown deeper paths such as `/api/sprints/random/extra` are not handled by `handleSprintRoutes()` and fall through to the main Worker 404.
 

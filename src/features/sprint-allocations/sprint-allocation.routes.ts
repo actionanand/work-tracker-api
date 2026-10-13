@@ -15,6 +15,8 @@ import {
 	sprintAllocationFilters,
 } from "./sprint-allocation.filters";
 import { listSprintAllocations } from "./sprint-allocation.service";
+import { managedResponse, mutationBody, notionIdSegment } from "../../shared/http/managed-write";
+import { updatePlannedDays } from "./sprint-allocation.write";
 
 interface SprintAllocationRouteConfig {
 	baseFilter?: NotionQueryFilter;
@@ -105,6 +107,10 @@ export async function handleSprintAllocationRoutes(
 	env: Env,
 ): Promise<Response | null> {
 	const config = sprintAllocationRouteConfigs.get(url.pathname);
+	const itemMatch = url.pathname.match(/^\/api\/sprint-allocations\/([^/]+)$/);
+	if (request.method === "PATCH" && !config && itemMatch) {
+		return managedResponse(async () => Response.json({ data: await updatePlannedDays(env, notionIdSegment(itemMatch[1], "allocationId"), await mutationBody(request)) }), "Failed to update Sprint Allocation");
+	}
 
 	if (request.method === "QUERY" && url.pathname === "/api/sprint-allocations") {
 		const query = await parseDomainQueryRequest(

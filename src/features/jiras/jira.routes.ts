@@ -32,6 +32,8 @@ import {
 	SpillReasonConflictError,
 } from "./jira.service";
 import { normalizeJiraKey } from "./jira.validation";
+import { managedResponse, mutationBody } from "../../shared/http/managed-write";
+import { addJiraToCurrentSprint } from "./jira.sprint";
 
 const jiraRouteFilters = new Map<string, NotionQueryFilter | undefined>([
 	["/api/jiras", undefined],
@@ -255,6 +257,13 @@ export async function handleJiraRoutes(
 	const spillReasonMatch = url.pathname.match(
 		/^\/api\/jiras\/([^/]+)\/spills\/([^/]+)\/reason$/,
 	);
+	const currentSprintMatch = url.pathname.match(/^\/api\/jiras\/([^/]+)\/current-sprint$/);
+	if (request.method === "PATCH" && currentSprintMatch) {
+		const decoded = decodeJiraKeyPathSegment(currentSprintMatch[1]);
+		const jiraKey = decoded === null ? null : normalizeJiraKey(decoded);
+		if (!jiraKey) return null;
+		return managedResponse(async () => Response.json(await addJiraToCurrentSprint(env, jiraKey, await mutationBody(request))), "Failed to assign JIRA to current Sprint");
+	}
 	if (request.method === "PATCH" && spillReasonMatch) {
 		const rawSpillNumber = spillReasonMatch[2];
 		const decodedJiraKey = decodeJiraKeyPathSegment(spillReasonMatch[1]);
