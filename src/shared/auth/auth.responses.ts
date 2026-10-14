@@ -133,6 +133,7 @@ export function corsPreflightResponse(pathname = ""): Response {
 }
 
 function allowHeaderForPath(pathname: string): string | null {
+	if (["/api/sprints/active/allocations/sync", "/api/sprints/active/allocations/plan"].includes(pathname)) return "PATCH, OPTIONS";
 	if (pathname === "/api/settings/alter-controls") return "GET, PATCH, OPTIONS";
 	if (pathname === "/api/sprints") return "GET, POST, OPTIONS";
 	if (["/api/sprints/active", "/api/sprints/history"].includes(pathname)) return "GET, OPTIONS";

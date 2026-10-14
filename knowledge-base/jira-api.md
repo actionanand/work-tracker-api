@@ -71,9 +71,11 @@ JIRA writes are deliberately create-only. `POST /api/jiras` accepts exactly:
 
 The Worker queries Notion for an exact JIRA-key match before creation. An existing key returns HTTP 409 with `{ "error": "JIRA already exists", "field": "jiraKey" }`. A non-null Project must be a valid Notion page ID belonging to the configured Projects data source. Status and Tag option IDs are validated against the live JIRA schema; clients obtain those IDs from `GET /api/jiras/meta`.
 
-`inActiveSprint` is a synthetic create-time field. When true, the Worker queries at most two active Sprints and writes the single result to the `Sprints` relation. Zero active Sprints returns HTTP 409 `No active Sprint is configured`; multiple active Sprints returns HTTP 409 `Multiple active Sprints are configured`. The `In Active Sprint` formula is never written directly.
+`inActiveSprint` is a synthetic create-time field. When true, the Worker queries at most two active Sprints, writes the single result to the `Sprints` relation and ensures one matching Sprint Allocation with initial Planned Days = 0. Existing allocations and their Planned Days are preserved. This automatic step does not require Alter Sprint. Zero active Sprints returns HTTP 409 `No active Sprint is configured`; multiple active Sprints returns HTTP 409 `Multiple active Sprints are configured`. The `In Active Sprint` formula is never written directly.
 
-Simple creation does not create a Sprint Allocation. `PATCH`, `DELETE`, and bulk delete are intentionally unsupported for JIRAs; complex changes continue to be made in Notion.
+If an allocation create has an uncertain result, the exact JIRA/Sprint pair is re-queried. One row confirms success; duplicates return `SPRINT_ALLOCATION_CONFLICT`. If no allocation can be verified, the endpoint returns `502` / `JIRA_SPRINT_ALLOCATION_PARTIAL` with `jiraKey`; the JIRA may already exist. It is not automatically recreated. Enable Alter Sprint and repair it through current-Sprint assignment or [allocation sync](sprint-api.md). The normal create response remains `{ "data": <mapped JIRA> }`.
+
+When `inActiveSprint` is false or omitted, creation does not create a Sprint Allocation. When true, creation adds the Sprint relation and ensures exactly one matching Sprint Allocation, creating it with Planned Days = 0 only if none exists.
 
 `GET /api/jiras/meta` exposes only `jiraKey`, `summary`, `projectId`, `statusOptionId`, `inActiveSprint`, `tagOptionIds`, `demoRequired`, and `appraisal`. Project metadata points to `/api/projects/active`, and Status and Tag options come from the live Notion data-source schema.
 

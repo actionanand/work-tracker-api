@@ -205,7 +205,23 @@ function stubJiraWriteFetch(options: JiraFetchOptions = {}) {
 		}
 
 		if (url.endsWith("/v1/pages") && init?.method === "POST") {
+			const body = JSON.parse(String(init.body));
+			if (body.parent?.data_source_id === testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID) {
+				return Promise.resolve(Response.json({
+					id: "created-allocation-id",
+					properties: {
+						Allocation: { title: [{ plain_text: "LSC-99999" }] },
+						Sprint: { relation: [{ id: activeSprintId }] },
+						JIRA: { relation: [{ id: "created-jira-id" }] },
+						"Planned Days": { number: 0 },
+					},
+				}));
+			}
 			return Promise.resolve(Response.json(createdJiraPage()));
+		}
+
+		if (url.endsWith(`/data_sources/${testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID}/query`)) {
+			return Promise.resolve(notionResponse([]));
 		}
 
 		return Promise.resolve(Response.json({}));
@@ -392,11 +408,16 @@ describe("JIRA create API", () => {
 				releaseItemIds: [],
 			},
 		});
-		expect(
-			fetchMock.mock.calls.some(([url]) =>
-				String(url).includes(testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID),
-			),
-		).toBe(false);
+		const allocationQuery = fetchMock.mock.calls.find(([url]) => String(url).endsWith(`/data_sources/${testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID}/query`));
+		expect(JSON.parse(String(allocationQuery?.[1]?.body))).toEqual({ page_size: 100, filter: { and: [
+			{ property: "Sprint", relation: { contains: activeSprintId } },
+			{ property: "JIRA", relation: { contains: "created-jira-id" } },
+		] } });
+		const allocationCreate = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith("/v1/pages") && init?.method === "POST" && JSON.parse(String(init.body)).parent?.data_source_id === testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID);
+		expect(JSON.parse(String(allocationCreate?.[1]?.body))).toEqual({ parent: { data_source_id: testEnv.SPRINT_ALLOCATIONS_DATA_SOURCE_ID }, properties: {
+			Allocation: { title: [{ text: { content: "LSC-99999" } }] }, Sprint: { relation: [{ id: activeSprintId }] },
+			JIRA: { relation: [{ id: "created-jira-id" }] }, "Planned Days": { number: 0 },
+		} });
 	});
 
 	it("stores create-time description Markdown literally", async () => {

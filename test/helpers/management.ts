@@ -101,7 +101,7 @@ function matches(page: MockPage, filter: any): boolean {
 	return true;
 }
 
-export function notionFixture(env: Env) {
+export function notionFixture(env: Env, fixtureOptions: { staleSprintRollups?: boolean } = {}) {
 	const pages = new Map<string, MockPage>([
 		[projectId, page(projectId, env.PROJECTS_DATA_SOURCE_ID, { Project: { title: [{ plain_text: "Work Tracker" }] } })],
 		[sprintId, sprintPage(env)], [jiraId, jiraPage(env)], [releaseId, releasePage(env)],
@@ -136,9 +136,15 @@ export function notionFixture(env: Env) {
 			return Response.json({ results, has_more: false, next_cursor: null });
 		}
 		if (url.endsWith("/v1/pages") && init.method === "POST") {
-			const id = creates++ === 0 ? createdId : `88888888-8888-8888-8888-${String(creates).padStart(12, "0")}`;
+			let id: string;
+			do {
+				id = creates++ === 0 ? createdId : `88888888-8888-8888-8888-${String(creates).padStart(12, "0")}`;
+			} while (pages.has(id));
 			const created = page(id, parsed.parent.data_source_id, {});
 			applyProperties(created, parsed.properties);
+			if (created.parent.data_source_id === env.JIRAS_DATA_SOURCE_ID) {
+				created.properties["In Active Sprint"] = { formula: { boolean: (created.properties.Sprints?.relation ?? []).some((ref: { id: string }) => pages.get(ref.id)?.properties.Active?.checkbox) } };
+			}
 			pages.set(id, created);
 			return Response.json(created);
 		}
@@ -149,7 +155,7 @@ export function notionFixture(env: Env) {
 			if (parsed.properties) applyProperties(item, parsed.properties);
 			if (parsed.in_trash) pages.delete(id);
 		}
-		if (item.parent.data_source_id === env.SPRINTS_DATA_SOURCE_ID) {
+		if (item.parent.data_source_id === env.SPRINTS_DATA_SOURCE_ID && !fixtureOptions.staleSprintRollups) {
 			const allocated = [...pages.values()].filter((value) => value.parent.data_source_id === env.SPRINT_ALLOCATIONS_DATA_SOURCE_ID && value.properties.Sprint?.relation?.some((ref: { id: string }) => ref.id === id)).reduce((sum, value) => sum + (value.properties["Planned Days"]?.number ?? 0), 0);
 			item.properties["Allocated Days"] = { rollup: { number: allocated } };
 			item.properties["Remaining Days"] = { formula: { number: 9.5 - allocated } };

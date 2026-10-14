@@ -61,6 +61,8 @@ import { mapJiraOption, type JiraOption } from "./jira-option.mapper";
 import { normalizeJiraKey } from "./jira.validation";
 import { buildJiraRelationships, type JiraRelationship } from "./jira.relationships";
 import { htmlToMarkdown } from "./jira.markdown";
+import { ensureJiraSprintAllocation, SprintAllocationEnsureError } from "../sprint-allocations/sprint-allocation.ensure";
+import { domainError } from "../../shared/http/managed-write";
 
 export interface JiraListResponse<TJira = Jira> {
 	data: TJira[];
@@ -238,7 +240,16 @@ export async function createJira(
 		properties,
 	});
 
-	return mapJira(page);
+	const jira = mapJira(page);
+	if (activeSprintId) {
+		try {
+			await ensureJiraSprintAllocation(env, jira, activeSprintId);
+		} catch (error) {
+			if (!(error instanceof SprintAllocationEnsureError)) throw error;
+			throw domainError(502, "JIRA was created but its Sprint Allocation could not be completed", "JIRA_SPRINT_ALLOCATION_PARTIAL", { jiraKey: jira.jiraKey });
+		}
+	}
+	return jira;
 }
 
 function parseJiraCreateInput(body: Record<string, unknown>): JiraCreateInput {

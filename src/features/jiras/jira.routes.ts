@@ -32,7 +32,7 @@ import {
 	SpillReasonConflictError,
 } from "./jira.service";
 import { normalizeJiraKey } from "./jira.validation";
-import { managedResponse, mutationBody } from "../../shared/http/managed-write";
+import { managedResponse, ManagedWriteError, mutationBody } from "../../shared/http/managed-write";
 import { addJiraToCurrentSprint } from "./jira.sprint";
 
 const jiraRouteFilters = new Map<string, NotionQueryFilter | undefined>([
@@ -232,6 +232,7 @@ export async function handleJiraRoutes(
 				Response.json({ data: await createJira(env, body) }, { status: 201 }),
 			);
 		} catch (error) {
+			if (error instanceof ManagedWriteError) return noStore(error.response);
 			if (error instanceof JiraWriteValidationError) return error.response;
 
 			if (error instanceof JiraAlreadyExistsError) {

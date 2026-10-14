@@ -14,6 +14,7 @@ import { combineSprintFilters, sprintFilters } from "./sprint.filters";
 import { SprintNotFoundError, getSprintById, listSprints } from "./sprint.service";
 import { managedResponse, mutationBody, noStore } from "../../shared/http/managed-write";
 import { createSprint, updateSprint } from "./sprint.write";
+import { planActiveSprintAllocations, syncActiveSprintAllocations } from "./sprint-planning.service";
 
 interface SprintRouteConfig {
 	baseFilter?: NotionQueryFilter;
@@ -147,6 +148,12 @@ export async function handleSprintRoutes(
 	env: Env,
 ): Promise<Response | null> {
 	const config = sprintRouteConfigs.get(url.pathname);
+	if (request.method === "PATCH" && url.pathname === "/api/sprints/active/allocations/sync") {
+		return managedResponse(async () => Response.json({ data: await syncActiveSprintAllocations(env, await mutationBody(request)) }), "Failed to sync Sprint Allocations");
+	}
+	if (request.method === "PATCH" && url.pathname === "/api/sprints/active/allocations/plan") {
+		return managedResponse(async () => Response.json({ data: await planActiveSprintAllocations(env, await mutationBody(request)) }), "Failed to plan Sprint Allocations");
+	}
 
 	if (request.method === "POST" && url.pathname === "/api/sprints") {
 		return managedResponse(async () => Response.json({ data: await createSprint(env, await mutationBody(request)) }, { status: 201 }), "Failed to create Sprint");

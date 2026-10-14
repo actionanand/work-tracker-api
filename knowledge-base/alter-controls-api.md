@@ -41,10 +41,10 @@ An expiry at or before server time is OFF, with `activeUntil: null` and `remaini
 
 | Control | Protected mutations |
 | --- | --- |
-| Alter Sprint | `POST /api/sprints`, `PATCH /api/sprints/:id`, `PATCH /api/jiras/:jiraKey/current-sprint`, `PATCH /api/sprint-allocations/:id` |
+| Alter Sprint | `POST /api/sprints`, `PATCH /api/sprints/:id`, `PATCH /api/jiras/:jiraKey/current-sprint`, `PATCH /api/sprint-allocations/:id`, `PATCH /api/sprints/active/allocations/sync`, `PATCH /api/sprints/active/allocations/plan` |
 | Alter Release Management | `POST /api/releases`, `PATCH /api/releases/:id`, `DELETE /api/releases/:id`, `PATCH /api/releases/bulk-date` |
 
-Reads remain available with controls OFF. Existing `POST /api/jiras`, including `inActiveSprint: true`, is unchanged and does **not** require Alter Sprint. JIRA description and spill-reason edits retain their existing contracts.
+Reads remain available with controls OFF. `POST /api/jiras`, including automatic allocation creation with `inActiveSprint: true`, does **not** require Alter Sprint. JIRA description and spill-reason edits retain their existing contracts.
 
 Disabled or expired controls return `403`:
 

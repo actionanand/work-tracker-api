@@ -190,7 +190,7 @@ Layer responsibilities:
 | `POST` | `/api/auth/logout` | Protected route that revokes the current session. |
 | `GET` | `/api/jiras` | All JIRAs from the configured Notion data source. |
 | `GET` | `/api/jiras/meta` | Live metadata for the deliberately limited JIRA create form. |
-| `POST` | `/api/jiras` | Create a simple JIRA through allow-listed fields. |
+| `POST` | `/api/jiras` | Create a simple JIRA; `inActiveSprint: true` ensures Sprint membership and a zero-day allocation without Alter Sprint. |
 | `GET` | `/api/jiras/active` | JIRAs in the active sprint. |
 | `GET` | `/api/jiras/blocked` | Active sprint JIRAs with `Status = Blocked`. |
 | `GET` | `/api/jiras/spillovers` | Active sprint JIRAs marked as spillovers. |
@@ -206,6 +206,8 @@ Layer responsibilities:
 | `PATCH` | `/api/sprints/:sprintId` | Edit the active Sprint while Alter Sprint is enabled. |
 | `PATCH` | `/api/jiras/:jiraKey/current-sprint` | Add an existing JIRA to the active Sprint and repair its allocation. |
 | `PATCH` | `/api/sprint-allocations/:allocationId` | Update Planned Days in an active Sprint. |
+| `PATCH` | `/api/sprints/active/allocations/sync` | Repair missing active-Sprint allocations without changing existing Planned Days. |
+| `PATCH` | `/api/sprints/active/allocations/plan` | Apply an idempotent Planned Days batch within Available Days capacity. |
 | `GET` | `/api/sprints/active` | Active Sprints. |
 | `GET` | `/api/sprints/history` | Inactive Sprints, newest Start Date first. |
 | `GET` | `/api/sprints/:sprintId` | Single Sprint detail with all related JIRAs and Sprint Allocation planning data. |
