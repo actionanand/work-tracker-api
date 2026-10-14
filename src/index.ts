@@ -1,4 +1,5 @@
 import { handleCompanyRoutes } from "./features/companies/company.routes";
+import { handleAnalyticsRoutes } from "./features/analytics/analytics.routes";
 import { credentialResponse, handleCredentialRoutes, isCredentialPath } from "./features/credentials/credential.routes";
 import {
 	handleAuthRenewRoute,
@@ -101,6 +102,9 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 
 	const credentialsResponse = await handleCredentialRoutes(request, url, env);
 	if (credentialsResponse) return credentialsResponse;
+
+	const analyticsResponse = await handleAnalyticsRoutes(request, url, env);
+	if (analyticsResponse) return analyticsResponse;
 
 	const jiraResponse = await handleJiraRoutes(request, url, env);
 

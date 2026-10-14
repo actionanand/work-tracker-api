@@ -188,6 +188,7 @@ Layer responsibilities:
 | `DELETE` | `/api/auth/sessions/:sessionId` | Protected session revocation route for one current-user session. |
 | `POST` | `/api/auth/sessions/logout-others` | Protected route that revokes all active current-user sessions except the current one. |
 | `POST` | `/api/auth/logout` | Protected route that revokes the current session. |
+| `GET` | `/api/analytics` | Historical work activity, Sprint spills and allocation-derived capacity for a required inclusive `from`/`to` range, at most 370 days. |
 | `GET` | `/api/jiras` | All JIRAs from the configured Notion data source. |
 | `GET` | `/api/jiras/meta` | Live metadata for the deliberately limited JIRA create form. |
 | `POST` | `/api/jiras` | Create a simple JIRA; `inActiveSprint: true` ensures Sprint membership and a zero-day allocation without Alter Sprint. |
@@ -307,6 +308,8 @@ Notion write endpoints are intentionally allow-listed. They accept only document
 The [Credential Vault API](knowledge-base/credential-vault-api.md) uses the existing `AUTH_DB` D1 binding and requires migration `0004_credential_vault.sql`. The client encrypts/decrypts credentials locally with a separate Vault passphrase; the Worker stores only bounded ciphertext envelopes and cryptographic metadata. It does not accept plaintext credential fields, perform encryption, or provide server-side search/reset. Vault responses are never cached. Credential deletes hard-delete D1 rows, unlike Notion trash operations.
 
 ## API Pagination
+
+`GET /api/analytics` is a dedicated [historical aggregate API](knowledge-base/analytics-api.md), distinct from the current-state Dashboard. It follows all relevant Notion cursors internally, returns `schemaVersion: 1`, derives spills from complete Sprint histories and capacity from allocation rows, and uses `Cache-Control: no-store`. Chart.js stays in Office Orbit; Analytics adds no D1 storage or chart dependencies.
 
 Collection/list endpoints support server-side cursor pagination through Notion:
 
@@ -568,6 +571,7 @@ Living technical references:
 - [Credential Vault API](knowledge-base/credential-vault-api.md)
 - [HTTP QUERY Method](knowledge-base/http-query-method.md)
 - [Dashboard API](knowledge-base/dashboard-api.md)
+- [Historical Analytics API](knowledge-base/analytics-api.md)
 - [Relation Enrichment](knowledge-base/relation-enrichment.md)
 - [Notion Integration](knowledge-base/notion-integration.md)
 - [Decisions](knowledge-base/decisions.md)

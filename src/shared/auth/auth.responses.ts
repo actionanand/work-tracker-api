@@ -128,11 +128,13 @@ export function corsPreflightResponse(pathname = ""): Response {
 			...(allow ? { Allow: allow } : {}),
 			...(queryCapable ? { "Accept-Query": "application/json" } : {}),
 			"Access-Control-Max-Age": "86400",
+			...(pathname === "/api/analytics" ? { "Cache-Control": "no-store" } : {}),
 		},
 	});
 }
 
 function allowHeaderForPath(pathname: string): string | null {
+	if (pathname === "/api/analytics") return "GET, OPTIONS";
 	if (["/api/credentials", "/api/credentials/vault"].includes(pathname)) return "GET, POST, OPTIONS";
 	if (pathname === "/api/credentials/bulk-delete") return "POST, OPTIONS";
 	if (/^\/api\/credentials\/[^/]+$/.test(pathname)) return "GET, PATCH, DELETE, OPTIONS";
