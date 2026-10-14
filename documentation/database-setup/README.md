@@ -25,4 +25,8 @@ normal workflows.
 A PostgreSQL-style relational equivalent of the Notion data model.
 
 It is maintained as a technical reference and possible migration design.
-Notion remains the current persistence layer for Work Tracker.
+Notion remains the persistence layer for Work Tracker domain records. The Worker
+also uses its existing `AUTH_DB` D1 database for auth/settings and the encrypted
+[Credential Vault](../../knowledge-base/credential-vault-api.md). Vault setup uses
+`migrations/0004_credential_vault.sql`; it is not part of the PostgreSQL-style
+reference schema above.

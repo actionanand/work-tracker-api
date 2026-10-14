@@ -281,6 +281,14 @@ Layer responsibilities:
 | `GET` | `/api/reference-library/:pageId` | Single owned article detail with metadata and page-body Markdown. |
 | `POST` | `/api/reference-library/import` | Import a `.md` or `.markdown` file with optional title, Category, and Tag metadata. |
 | `GET` | `/api/reference-library/imports/:taskId` | Poll a Notion async markdown import task. |
+| `GET` | `/api/credentials/vault` | Read encrypted Vault initialization metadata. |
+| `POST` | `/api/credentials/vault` | Initialize the single Vault exactly once. |
+| `GET` | `/api/credentials` | List all encrypted credentials, newest update first. |
+| `POST` | `/api/credentials` | Store a client-encrypted credential envelope. |
+| `GET` | `/api/credentials/:credentialId` | Read one encrypted credential envelope. |
+| `PATCH` | `/api/credentials/:credentialId` | Replace an envelope using an expected revision. |
+| `DELETE` | `/api/credentials/:credentialId` | Hard-delete a credential from D1. |
+| `POST` | `/api/credentials/bulk-delete` | Delete 1..25 validated credential UUIDs. |
 
 All `/api/*` routes except `POST /api/auth/login` and `OPTIONS` preflights require `Authorization: Bearer <accessToken>`. Relation-ID query parameters such as `companyId`, `teamId`, `projectId`, `sprintId`, and `jiraId` must be valid Notion page IDs. Invalid IDs return HTTP 400 before Notion is called.
 
@@ -294,7 +302,9 @@ Selected endpoints support optional shallow relation enrichment with `include=re
 
 `QUERY /api/jiras/options` is a lightweight picker endpoint. With no `q`, or an empty/whitespace `q`, it returns only current active-sprint JIRAs. With a non-empty `q`, it searches all JIRAs by `JIRA Key` or `Summary`, including historical and non-sprint JIRAs. It returns only `id`, `jiraKey`, `summary`, `status`, and `inActiveSprint`.
 
-Write endpoints are intentionally allow-listed. They accept only documented mapped fields, validate Notion status/select/multi-select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion. Todo writes also validate the complete recurrence state and clear incompatible fields when the schedule type changes. Delete endpoints move owned pages to Notion trash; they do not hard-delete data.
+Notion write endpoints are intentionally allow-listed. They accept only documented mapped fields, validate Notion status/select/multi-select option IDs against the current data-source schema, validate relation/page IDs before use, and never forward arbitrary client JSON to Notion. Todo writes also validate the complete recurrence state and clear incompatible fields when the schedule type changes. Notion delete endpoints move owned pages to trash; they do not hard-delete data.
+
+The [Credential Vault API](knowledge-base/credential-vault-api.md) uses the existing `AUTH_DB` D1 binding and requires migration `0004_credential_vault.sql`. The client encrypts/decrypts credentials locally with a separate Vault passphrase; the Worker stores only bounded ciphertext envelopes and cryptographic metadata. It does not accept plaintext credential fields, perform encryption, or provide server-side search/reset. Vault responses are never cached. Credential deletes hard-delete D1 rows, unlike Notion trash operations.
 
 ## API Pagination
 
@@ -555,6 +565,7 @@ Living technical references:
 - [Task API](knowledge-base/task-api.md)
 - [Memo API](knowledge-base/memo-api.md)
 - [Reference Library API](knowledge-base/reference-library-api.md)
+- [Credential Vault API](knowledge-base/credential-vault-api.md)
 - [HTTP QUERY Method](knowledge-base/http-query-method.md)
 - [Dashboard API](knowledge-base/dashboard-api.md)
 - [Relation Enrichment](knowledge-base/relation-enrichment.md)

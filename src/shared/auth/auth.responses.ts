@@ -133,6 +133,9 @@ export function corsPreflightResponse(pathname = ""): Response {
 }
 
 function allowHeaderForPath(pathname: string): string | null {
+	if (["/api/credentials", "/api/credentials/vault"].includes(pathname)) return "GET, POST, OPTIONS";
+	if (pathname === "/api/credentials/bulk-delete") return "POST, OPTIONS";
+	if (/^\/api\/credentials\/[^/]+$/.test(pathname)) return "GET, PATCH, DELETE, OPTIONS";
 	if (["/api/sprints/active/allocations/sync", "/api/sprints/active/allocations/plan"].includes(pathname)) return "PATCH, OPTIONS";
 	if (pathname === "/api/settings/alter-controls") return "GET, PATCH, OPTIONS";
 	if (pathname === "/api/sprints") return "GET, POST, OPTIONS";

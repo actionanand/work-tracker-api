@@ -1,4 +1,5 @@
 import { handleCompanyRoutes } from "./features/companies/company.routes";
+import { credentialResponse, handleCredentialRoutes, isCredentialPath } from "./features/credentials/credential.routes";
 import {
 	handleAuthRenewRoute,
 	handleProtectedAuthRoutes,
@@ -97,6 +98,9 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 			return authResponse;
 		}
 	}
+
+	const credentialsResponse = await handleCredentialRoutes(request, url, env);
+	if (credentialsResponse) return credentialsResponse;
 
 	const jiraResponse = await handleJiraRoutes(request, url, env);
 
@@ -218,11 +222,13 @@ export default {
 		_ctx?: ExecutionContext,
 	): Promise<Response> {
 		try {
-			return withCorsHeaders(await routeRequest(request, env));
+			const response = await routeRequest(request, env);
+			return withCorsHeaders(isCredentialPath(new URL(request.url).pathname) ? credentialResponse(response) : response);
 		} catch {
 			console.error("WORKER_INTERNAL_ERROR");
 
-			return withCorsHeaders(internalServerErrorResponse());
+			const response = internalServerErrorResponse();
+			return withCorsHeaders(isCredentialPath(new URL(request.url).pathname) ? credentialResponse(response) : response);
 		}
 	},
 };
