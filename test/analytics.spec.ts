@@ -130,6 +130,7 @@ describe("Analytics routing and date validation", () => {
 		const response = await api(f.env, path, "OPTIONS");
 		expect(response.status).toBe(204);
 		expect(response.headers.get("Allow")).toBe("GET, OPTIONS");
+		expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, OPTIONS");
 		expect(response.headers.get("Accept-Query")).toBeNull();
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 		expect(f.fetchMock).not.toHaveBeenCalled();

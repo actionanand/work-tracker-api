@@ -9,6 +9,8 @@ export function withCorsHeaders(response: Response): Response {
 	const headers = new Headers(response.headers);
 
 	for (const [name, value] of Object.entries(CORS_HEADERS)) {
+		// Preserve an explicit preflight method policy instead of widening it.
+		if (response.status === 204 && name === "Access-Control-Allow-Methods" && headers.has(name)) continue;
 		headers.set(name, value);
 	}
 
@@ -128,7 +130,7 @@ export function corsPreflightResponse(pathname = ""): Response {
 			...(allow ? { Allow: allow } : {}),
 			...(queryCapable ? { "Accept-Query": "application/json" } : {}),
 			"Access-Control-Max-Age": "86400",
-			...(pathname === "/api/analytics" ? { "Cache-Control": "no-store" } : {}),
+			...(pathname === "/api/analytics" ? { "Cache-Control": "no-store", "Access-Control-Allow-Methods": "GET, OPTIONS" } : {}),
 		},
 	});
 }
